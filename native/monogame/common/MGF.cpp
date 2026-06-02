@@ -138,6 +138,8 @@ namespace
                 characters.push_back(static_cast<mgchar>(value));
         }
 
+        // The managed caller can send overlapping ranges.  Sorting and deduplicating keeps the
+        // bake idempotent and avoid repacking the same codepoint more than once per size.
         std::sort(characters.begin(), characters.end());
         characters.erase(std::unique(characters.begin(), characters.end()), characters.end());
         return characters;
@@ -459,6 +461,9 @@ namespace
                 const auto alpha = glyph.Pixels[static_cast<size_t>(row) * glyph.Width + column];
                 const auto atlasIndex = static_cast<size_t>(((glyph.AtlasY + row) * atlasWidth) + glyph.AtlasX + column) * 4;
 
+                // The atlas is exported as RGBA even though stb_truetype gives us a single channel
+                // coverage bitmap.  Replicating coverage into every channel keeps the native output
+                // upload ready for MonoGame's existing texture path without an extra swizzle step.
                 atlas[atlasIndex + 0] = alpha;
                 atlas[atlasIndex + 1] = alpha;
                 atlas[atlasIndex + 2] = alpha;
@@ -498,6 +503,9 @@ namespace
                               requiredNodes.data(),
                               atlasSize);
 
+            // Existing glyphs are treated as required so a rebuild never drops glyphs that were
+            // already visible to managed code.  Only overflow from the newly requested set spills to
+            // another page.
             PackResult requiredResult = pack_glyph_group(&requiredContext, requiredGlyphs);
             if (!requiredResult.UnpackedGlyphs.empty())
             {
@@ -610,6 +618,8 @@ namespace
         std::vector<RuntimePageUpdateInfo> uniqueUpdates;
         uniqueUpdates.reserve(pageUpdates.size());
 
+        // A single ensure call can append to a page and later rebuild that same page.  The public
+        // result only needs the final page snapshot plus whether any rebuild happened along the way.
         for (const RuntimePageUpdateInfo& pageUpdate : pageUpdates)
         {
             bool merged = false;
@@ -704,6 +714,9 @@ namespace
                 auto glyphsToAppend = remainingGlyphs;
                 set_page_index(glyphsToAppend, writablePage->Index);
 
+                // Appending into the existing packer is the cheapest path because it preserves the
+                // current atlas image and existing glyph coordinates.  We only rebuild when the new
+                // rectangles no longer fit in the current page layout.
                 if (writablePage->AtlasWidth > 0 &&
                     writablePage->AtlasHeight > 0 &&
                     pack_glyphs(&writablePage->PackContext, glyphsToAppend))
@@ -923,6 +936,8 @@ mgbool MGF_BakeSpriteFont(mgbyte* data,
                                                      runtimeGlyphCount,
                                                      runtimeLineSpacing);
 
+    // SpriteFont still expects a single atlas texture, so the one shot helper stays strict even
+    // though the runtime font path can span multiple pages.
     if (!result || runtimePageUpdates == nullptr || runtimePageUpdateCount != 1 || runtimeGlyphs == nullptr || runtimeGlyphCount <= 0)
     {
         MGF_RuntimeFont_Destroy(runtimeFont);
