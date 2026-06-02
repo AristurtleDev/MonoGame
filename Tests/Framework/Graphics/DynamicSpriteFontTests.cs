@@ -70,6 +70,15 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     }
 
     [Test]
+    public void FromFile_WithoutCharacterRegions_ReturnsDynamicSpriteFont()
+    {
+        using DynamicSpriteFont font = DynamicSpriteFont.FromFile(gd, Paths.Font("IBMPlexSans-Regular.ttf"), 32.0f);
+
+        Assert.That(font, Is.Not.Null);
+        Assert.That(font.Size, Is.EqualTo(32.0f));
+    }
+
+    [Test]
     public void FromStream_GraphicsDeviceIsNull_ThrowsArgumentNullException()
     {
         using (Stream stream = OpenRuntimeFontStream())
@@ -120,6 +129,18 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         {
             using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
+            Assert.That(font.Size, Is.EqualTo(32.0f));
+        }
+    }
+
+    [Test]
+    public void FromStream_WithoutCharacterRegions_ReturnsDynamicSpriteFont()
+    {
+        using (Stream stream = OpenRuntimeFontStream())
+        {
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f);
+
+            Assert.That(font, Is.Not.Null);
             Assert.That(font.Size, Is.EqualTo(32.0f));
         }
     }
@@ -309,17 +330,17 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
             using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
 
             font.MeasureString("a");
-            Texture2D initialTexture = font.Texture;
+            Texture2D initialTexture = font.GetTexture(0);
 
             font.Size = 32.0f;
             font.MeasureString("W");
-            Texture2D grownTexture = font.Texture;
+            Texture2D grownTexture = font.GetTexture(0);
 
             font.Size = 16.0f;
             font.MeasureString("a");
 
             Assert.That(initialTexture, Is.Not.Null);
-            Assert.That(grownTexture, Is.SameAs(font.Texture));
+            Assert.That(grownTexture, Is.SameAs(font.GetTexture(0)));
         }
     }
 
@@ -475,11 +496,6 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     private static Stream OpenRuntimeFontStream()
     {
         return File.OpenRead(Paths.Font("IBMPlexSans-Regular.ttf"));
-    }
-
-    private static Stream OpenPagingFontStream()
-    {
-        return File.OpenRead(Paths.Font("NotoSansJP-Regular.ttf"));
     }
 #endif
 }

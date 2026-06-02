@@ -50,23 +50,17 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     }
 
     /// <summary>
-    /// Gets the current atlas texture for this font face.
+    /// Gets the total number of atlas pages currently allocated for this font face.
     /// </summary>
-    public Texture2D Texture
+    public int TotalPages
     {
         get
         {
-            return GetCurrentTexture();
-        }
-    }
+            if (IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(DynamicSpriteFont));
+            }
 
-    /// <summary>
-    /// Gets the number of atlas pages currently allocated for this font face.
-    /// </summary>
-    public int AtlasPageCount
-    {
-        get
-        {
             return _texturesByPage.Count;
         }
     }
@@ -98,6 +92,27 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         _texturesByPage[0] = CreateInitialTexture(graphicsDevice);
         _currentPageIndex  = 0;
         _size = size;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="DynamicSpriteFont"/> from a font file.
+    /// </summary>
+    /// <param name="graphicsDevice">The graphics device that will own the runtime font resources.</param>
+    /// <param name="path">The path to a TrueType or OpenType font file.</param>
+    /// <param name="size">The initial active size for the dynamic font</param>
+    /// <returns>A new <see cref="DynamicSpriteFont"/> for the supplied font face.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="graphicsDevice"/> or <paramref name="path"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="path"/> is empty or whitespace.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Throw when <paramref name="size"/> is zero, negative <see cref="float.NaN"/>, or infinite.
+    /// </exception>
+    public static DynamicSpriteFont FromFile(GraphicsDevice graphicsDevice, string path, float size)
+    {
+        return FromFile(graphicsDevice, path, size, Array.Empty<CharacterRegion>());
     }
 
     /// <summary>
@@ -154,6 +169,24 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     /// <param name="graphicsDevice">The graphics device that will own runtime font resources.</param>
     /// <param name="stream">The stream containing TrueType or OpenType font data.</param>
     /// <param name="size">The initial active size for the dynamic font.</param>
+    /// <returns>A new <see cref="DynamicSpriteFont"/> for the supplied font face.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="graphicsDevice"/> or <paramref name="stream"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Throw when <paramref name="size"/> is zero, negative <see cref="float.NaN"/>, or infinite.
+    /// </exception>
+    public static DynamicSpriteFont FromStream(GraphicsDevice graphicsDevice, Stream stream, float size)
+    {
+       return FromStream(graphicsDevice, stream, size, Array.Empty<CharacterRegion>());
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="DynamicSpriteFont"/> from a font stream.
+    /// </summary>
+    /// <param name="graphicsDevice">The graphics device that will own runtime font resources.</param>
+    /// <param name="stream">The stream containing TrueType or OpenType font data.</param>
+    /// <param name="size">The initial active size for the dynamic font.</param>
     /// <param name="characterRegions">Optional character regions to warm at creation time.</param>
     /// <returns>A new <see cref="DynamicSpriteFont"/> for the supplied font face.</returns>
     /// <exception cref="ArgumentNullException">
@@ -190,6 +223,26 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         DynamicSpriteFontRuntimeState runtimeState = CreateRuntimeState(fontData);
         return new DynamicSpriteFont(graphicsDevice, fontData, runtimeState, size, regions.ToArray());
 #endif
+    }
+
+    /// <summary>
+    /// Gets the atlas texture for a specific page index.
+    /// </summary>
+    /// <param name="pageIndex">The atlas page index to retrieve.</param>
+    /// <returns>The texture backing the requested atlas page.</returns>
+    public Texture2D GetTexture(int pageIndex)
+    {
+        if (IsDisposed)
+        {
+            throw new ObjectDisposedException(nameof(DynamicSpriteFont));
+        }
+
+        if (pageIndex < 0 || pageIndex >= _texturesByPage.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex), $"{nameof(pageIndex)} must be greater than or equal to zero and less than {TotalPages}.");
+        }
+
+        return _texturesByPage[pageIndex];
     }
 
     /// <summary>
@@ -315,11 +368,6 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
                                     TextContainsUnresolvableCharacters);
     }
 
-    private Texture2D GetCurrentTexture()
-    {
-        return GetTexture(_currentPageIndex);
-    }
-
     /// <summary>
     /// Gets the atlas texture for a specific page index
     /// </summary>
@@ -327,6 +375,11 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     /// <returns></returns>
     public Texture2D GetAtlasPageTexture(int pageIndex)
     {
+        if (IsDisposed)
+        {
+            throw new ObjectDisposedException(nameof(DynamicSpriteFont));
+        }
+
         if (pageIndex < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(pageIndex), $"{nameof(pageIndex)} must not be negative.");
@@ -358,17 +411,6 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         }
 
         base.Dispose(disposing);
-    }
-
-    private Texture2D GetTexture(int pageIndex)
-    {
-        Texture2D texture;
-        if (_texturesByPage.TryGetValue(pageIndex, out texture))
-        {
-            return texture;
-        }
-
-        throw new InvalidOperationException($"DynamicSpritFont does not have a texture for page {pageIndex}.");
     }
 
     private static long GetGlyphLookupKey(char character, int size)
@@ -412,23 +454,6 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         Texture2D texture = new Texture2D(graphicsDevice, 1, 1, false, SurfaceFormat.Color);
         texture.SetData(new Color[] { Color.Transparent });
         return texture;
-    }
-
-    private static Texture2D GetTextureOrDefault(Dictionary<int, Texture2D> texturesByPage, int currentPageIndex)
-    {
-        Texture2D texture;
-        if (texturesByPage.TryGetValue(currentPageIndex, out texture))
-        {
-            return texture;
-        }
-
-        // The current page may no longer be preset, so fall back to any available atlas texture
-        foreach (KeyValuePair<int, Texture2D> pair in texturesByPage)
-        {
-            return pair.Value;
-        }
-
-        throw new InvalidOperationException("DynamicSpriteFont requires at least one atlas texture.");
     }
 
     private static void ValidateSize(float size, string paramName)
