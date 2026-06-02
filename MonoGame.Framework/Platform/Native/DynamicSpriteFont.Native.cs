@@ -9,7 +9,7 @@ using MonoGame.Interop;
 
 namespace Microsoft.Xna.Framework.Graphics;
 
-public sealed partial class DynamicSpriteFont
+public sealed partial class DynamicSpriteFont : GraphicsResource
 {
 #if NATIVE
     private unsafe void PlatformEnsureGlyphs(int rasterizedSize,
@@ -277,12 +277,12 @@ public sealed partial class DynamicSpriteFont
             currentTexture.Width != pageUpdate.AtlasWidth ||
             currentTexture.Height != pageUpdate.AtlasHeight)
         {
-            nextTexture = new Texture2D(_graphicsDevice, pageUpdate.AtlasWidth, pageUpdate.AtlasHeight, false, SurfaceFormat.Color);
+            nextTexture = new Texture2D(GraphicsDevice, pageUpdate.AtlasWidth, pageUpdate.AtlasHeight, false, SurfaceFormat.Color);
         }
 
         if (pageUpdate.AtlasRebuilt || nextTexture != currentTexture)
         {
-            MGG.Texture_SetData(_graphicsDevice.Handle,
+            MGG.Texture_SetData(GraphicsDevice.Handle,
                                 nextTexture.Handle,
                                 0,
                                 0,

@@ -13,7 +13,7 @@ namespace Microsoft.Xna.Framework.Graphics;
 /// <summary>
 /// Represents a runtime loaded font face that can bake glyphs on demand.
 /// </summary>
-public sealed partial class DynamicSpriteFont : IDisposable
+public sealed partial class DynamicSpriteFont : GraphicsResource
 {
     private const string TextContainsUnresolvableCharacters =
         "Text contains characters that cannot be resolved by this DynamicSpriteFont.";
@@ -23,15 +23,13 @@ public sealed partial class DynamicSpriteFont : IDisposable
     private readonly CharacterRegion[] _characterRegions;
     private readonly byte[] _fontData;
 
-    // Incremental atlas uploads need the last known glyph bounds across every baked size, 
+    // Incremental atlas uploads need the last known glyph bounds across every baked size,
     // not just the current prepared size
     private readonly Dictionary<int, Dictionary<long, Rectangle>> _glyphBoundsByPage;
 
-    private readonly GraphicsDevice _graphicsDevice;
     private readonly Dictionary<int, PreparedTextFont> _preparedTextFontsBySize;
     private readonly Dictionary<int, Texture2D> _texturesByPage;
     private readonly DynamicSpriteFontRuntimeState _runtimeState;
-    private bool _isDisposed;
     private int _currentPageIndex;
     private float _size;
 
@@ -90,7 +88,7 @@ public sealed partial class DynamicSpriteFont : IDisposable
                               float size,
                               CharacterRegion[] characterRegions)
     {
-        _graphicsDevice = graphicsDevice;
+        GraphicsDevice = graphicsDevice;
         _fontData = fontData;
         _glyphBoundsByPage = new Dictionary<int, Dictionary<long, Rectangle>>();
         _runtimeState = runtimeState;
@@ -343,29 +341,23 @@ public sealed partial class DynamicSpriteFont : IDisposable
         throw new ArgumentOutOfRangeException(nameof(pageIndex), $"DynamicSpriteFont does not have an atlas page at index {pageIndex}.");
     }
 
-    public void Dispose()
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
     {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    private void Dispose(bool disposing)
-    {
-        if (_isDisposed)
+        if(disposing)
         {
-            return;
+            foreach (Texture2D texture in _texturesByPage.Values)
+            {
+                texture.Dispose();
+            }
+
+            _texturesByPage.Clear();
+            _preparedTextFontsBySize.Clear();
+            _glyphBoundsByPage.Clear();
+            _runtimeState.Dispose();
         }
 
-        foreach(Texture2D texture in _texturesByPage.Values)
-        {
-            texture.Dispose();
-        }
-
-        _texturesByPage.Clear();
-        _preparedTextFontsBySize.Clear();
-        _glyphBoundsByPage.Clear();
-        _runtimeState.Dispose();
-        _isDisposed = true;
+        base.Dispose(disposing);
     }
 
     private Texture2D GetTexture(int pageIndex)
@@ -463,7 +455,7 @@ public sealed partial class DynamicSpriteFont : IDisposable
         }
 
         ~DynamicSpriteFontRuntimeState() => Dispose(false);
-        
+
 
         public void Dispose()
         {
