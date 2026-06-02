@@ -15,8 +15,8 @@ namespace Microsoft.Xna.Framework.Graphics;
 /// </summary>
 public sealed partial class DynamicSpriteFont : GraphicsResource
 {
-    private const string TextContainsUnresolvableCharacters =
-        "Text contains characters that cannot be resolved by this DynamicSpriteFont.";
+    private const string TextContainsUnresolvableCharacters = $"Text contains characters that cannot be resolved by this {nameof(DynamicSpriteFont)}.";
+    private const string UnresolvableCharacter = $"Character cannot be resolved by this ${nameof(DynamicSpriteFont)}.";
 
     private static readonly Dictionary<long, Rectangle> EmptyGlyphBounds = new Dictionary<long, Rectangle>();
 
@@ -30,6 +30,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     private readonly Dictionary<int, PreparedTextFont> _preparedTextFontsBySize;
     private readonly Dictionary<int, Texture2D> _texturesByPage;
     private readonly DynamicSpriteFontRuntimeState _runtimeState;
+    private char? _defaultCharacter;
     private int _currentPageIndex;
     private float _size;
 
@@ -46,6 +47,33 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         {
             ValidateSize(value, nameof(value));
             _size = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the character that will be substituted when a given character
+    /// cannot be resolved by this font.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the assigned character cannot be resolved by this font.
+    /// </exception>
+    public char? DefaultCharacter
+    {
+        get => _defaultCharacter;
+        set
+        {
+            if (IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(DynamicSpriteFont));
+            }
+
+            if (value.HasValue)
+            {
+                EnsureDefaultCharacterAvailable(value.Value);
+            }
+
+            _defaultCharacter = value;
+            UpdateDefaultGlyphIndices();
         }
     }
 
@@ -90,7 +118,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         _preparedTextFontsBySize = new Dictionary<int, PreparedTextFont>();
         _texturesByPage = new Dictionary<int, Texture2D>();
         _texturesByPage[0] = CreateInitialTexture(graphicsDevice);
-        _currentPageIndex  = 0;
+        _currentPageIndex = 0;
         _size = size;
     }
 
@@ -178,7 +206,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     /// </exception>
     public static DynamicSpriteFont FromStream(GraphicsDevice graphicsDevice, Stream stream, float size)
     {
-       return FromStream(graphicsDevice, stream, size, Array.Empty<CharacterRegion>());
+        return FromStream(graphicsDevice, stream, size, Array.Empty<CharacterRegion>());
     }
 
     /// <summary>
@@ -364,40 +392,14 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
                                     glyphs,
                                     lineSpacing,
                                     spacing,
-                                    -1,
+                                    GetDefaultGlyphIndex(glyphs),
                                     TextContainsUnresolvableCharacters);
-    }
-
-    /// <summary>
-    /// Gets the atlas texture for a specific page index
-    /// </summary>
-    /// <param name="pageIndex"></param>
-    /// <returns></returns>
-    public Texture2D GetAtlasPageTexture(int pageIndex)
-    {
-        if (IsDisposed)
-        {
-            throw new ObjectDisposedException(nameof(DynamicSpriteFont));
-        }
-
-        if (pageIndex < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(pageIndex), $"{nameof(pageIndex)} must not be negative.");
-        }
-
-        Texture2D texture;
-        if(_texturesByPage.TryGetValue(pageIndex, out texture))
-        {
-            return texture;
-        }
-
-        throw new ArgumentOutOfRangeException(nameof(pageIndex), $"DynamicSpriteFont does not have an atlas page at index {pageIndex}.");
     }
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        if(disposing)
+        if (disposing)
         {
             foreach (Texture2D texture in _texturesByPage.Values)
             {
@@ -454,6 +456,102 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         Texture2D texture = new Texture2D(graphicsDevice, 1, 1, false, SurfaceFormat.Color);
         texture.SetData(new Color[] { Color.Transparent });
         return texture;
+    }
+
+    private void EnsureDefaultCharacterAvailable(char defaultCharacter)
+    {
+        FontCharacterSource source = new FontCharacterSource(defaultCharacter.ToString());
+
+        try
+        {
+            EnsureGlyphs(ref source);
+        }
+        catch (InvalidOperationException)
+        {
+            throw new ArgumentException(UnresolvableCharacter);
+        }
+
+        if (!TryGetDefaultGlyphIndex(GetCurrentPreparedTextFont(), defaultCharacter, out _))
+        {
+            throw new ArgumentException(UnresolvableCharacter);
+        }
+    }
+
+    private int GetDefaultGlyphIndex(FontGlyph[] glyphs)
+    {
+        if (!_defaultCharacter.HasValue)
+        {
+            return -1;
+        }
+
+        if (TryGetDefaultGlyphIndex(glyphs, _defaultCharacter.Value, out int defaultGlyphIndex))
+        {
+            return defaultGlyphIndex;
+        }
+
+        return -1;
+    }
+
+    private void UpdateDefaultGlyphIndices()
+    {
+        foreach (PreparedTextFont preparedTextFont in _preparedTextFontsBySize.Values)
+        {
+            preparedTextFont.UpdateDefaultGlyphIndex(GetDefaultGlyphIndex(preparedTextFont));
+        }
+    }
+
+    private int GetDefaultGlyphIndex(PreparedTextFont preparedTextFont)
+    {
+        if (!_defaultCharacter.HasValue)
+        {
+            return -1;
+        }
+
+        if (TryGetDefaultGlyphIndex(preparedTextFont, _defaultCharacter.Value, out int defaultGlyphIndex))
+        {
+            return defaultGlyphIndex;
+        }
+
+        return -1;
+    }
+
+    private static bool TryGetDefaultGlyphIndex(FontGlyph[] glyphs, char defaultCharacter, out int defaultGlyphIndex)
+    {
+        char alternate = char.IsUpper(defaultCharacter) ?
+                         char.ToLower(defaultCharacter) :
+                         char.ToUpper(defaultCharacter);
+
+        bool checkAlternate = alternate != defaultCharacter;
+        int alternateIndex = -1;
+
+        for (int i = 0; i < glyphs.Length; i++)
+        {
+            char character = glyphs[i].Character;
+            if (character == defaultCharacter)
+            {
+                defaultGlyphIndex = i;
+                return true;
+            }
+
+            if (checkAlternate && alternateIndex == -1 && character == alternate)
+            {
+                alternateIndex = i;
+            }
+        }
+
+        defaultGlyphIndex = alternateIndex;
+        return alternateIndex != -1;
+    }
+
+    private static bool TryGetDefaultGlyphIndex(PreparedTextFont preparedTextFont, char defaultCharacter, out int defaultGlyphIndex)
+    {
+        if(preparedTextFont.TryGetGlyphIndex(defaultCharacter, out defaultGlyphIndex))
+        {
+            return true;
+        }
+
+        defaultGlyphIndex = -1;
+        return false;
     }
 
     private static void ValidateSize(float size, string paramName)

@@ -17,6 +17,11 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
                                              ref FontCharacterSource text)
     {
         List<char> missingCharacters = GetMissingCharacters(preparedTextFont, ref text);
+        if (_defaultCharacter.HasValue && !preparedTextFont.TryGetGlyphIndex(_defaultCharacter.Value, out _))
+        {
+            missingCharacters.Add(_defaultCharacter.Value);
+        }
+
         if (missingCharacters.Count == 0)
         {
             return;
@@ -344,6 +349,8 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
             {
                 pair.Value.Update(_texturesByPage, _currentPageIndex, Array.Empty<FontGlyph>(), lineSpacing);
             }
+
+            pair.Value.UpdateDefaultGlyphIndex(GetDefaultGlyphIndex(pair.Value));
         }
 
         foreach (KeyValuePair<int, List<FontGlyph>> pair in glyphsBySize)

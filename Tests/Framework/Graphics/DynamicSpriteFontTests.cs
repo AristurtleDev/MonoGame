@@ -146,6 +146,72 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     }
 
     [Test]
+    [TestCase((char)127)]
+    [TestCase((char)31)]
+    public void DefaultCharacter_SetToUnavailableCharacter_ThrowsArgumentException(char character)
+    {
+        using (Stream stream = OpenRuntimeFontStream())
+        {
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f);
+
+            Assert.Throws<ArgumentException>(() => font.DefaultCharacter = character);
+        }
+    }
+
+    [Test]
+    [TestCase((char)32)]
+    [TestCase((char)63)]
+    public void DefaultCharacter_SetToAvailableCharacter_DoesNotThrow(char character)
+    {
+        using (Stream stream = OpenRuntimeFontStream())
+        {
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f);
+
+            Assert.DoesNotThrow(() => font.DefaultCharacter = character);
+        }
+    }
+
+    [Test]
+    public void MeasureString_WithDefaultCharacter_UsesFallbackGlyph()
+    {
+        using (Stream stream = OpenRuntimeFontStream())
+        {
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f);
+            string unresolvedText = ((char)127).ToString();
+
+            font.DefaultCharacter = '?';
+
+            Vector2 fallbackSize = font.MeasureString("?");
+            Vector2 unresolvedSize = font.MeasureString(unresolvedText);
+
+            Assert.That(unresolvedSize, Is.EqualTo(fallbackSize).Using(Vector2Comparer.Epsilon));
+        }
+    }
+
+    [Test]
+    public void MeasureString_WithDefaultCharacterAfterSizeChange_UsesFallbackGlyph()
+    {
+        using (Stream stream = OpenRuntimeFontStream())
+        {
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f);
+            string unresolvedText = ((char)127).ToString();
+
+            font.DefaultCharacter = '?';
+
+            Vector2 smallFallbackSize = font.MeasureString("?");
+            Vector2 smallUnresolvedSize = font.MeasureString(unresolvedText);
+
+            font.Size = 32.0f;
+
+            Vector2 largeFallbackSize = font.MeasureString("?");
+            Vector2 largeUnresolvedSize = font.MeasureString(unresolvedText);
+
+            Assert.That(smallUnresolvedSize, Is.EqualTo(smallFallbackSize).Using(Vector2Comparer.Epsilon));
+            Assert.That(largeUnresolvedSize, Is.EqualTo(largeFallbackSize).Using(Vector2Comparer.Epsilon));
+        }
+    }
+
+    [Test]
     public void Size_SetToZero_ThrowsArgumentOutOfRangeException()
     {
         using (Stream stream = OpenRuntimeFontStream())

@@ -247,7 +247,7 @@ internal sealed class PreparedTextFont
         _defaultGlyphIndex = defaultGlyphIndex;
     }
 
-    private bool TryGetGlyphIndex(char c, out int index)
+    internal bool TryGetGlyphIndex(char c, out int index)
     {
         if (_glyphIndices.TryGetValue(c, out index))
         {
