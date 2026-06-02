@@ -8,6 +8,16 @@
 
 struct MGF_RuntimeFont;
 
+enum MGF_RuntimeFontErrorCode
+{
+    MGF_RuntimeFontErrorCode_None = 0,
+    MGF_RuntimeFontErrorCode_InvalidArgument = 1,
+    MGF_RuntimeFontErrorCode_OutOfMemory = 2,
+    MGF_RuntimeFontErrorCode_AtlasCapacityExceeded = 3,
+    MGF_RuntimeFontErrorCode_NoGlyphData = 4,
+    MGF_RuntimeFontErrorCode_Unknown = 5
+};
+
 struct MGF_CharacterRegion
 {
     mgchar Start;
@@ -18,6 +28,7 @@ struct MGF_Glyph
 {
     mgchar Character;
     mgint Size;
+    mgint PageIndex;
     mgint BoundsX;
     mgint BoundsY;
     mgint BoundsWidth;
@@ -25,10 +36,19 @@ struct MGF_Glyph
     mgint CroppingX;
     mgint CroppingY;
     mgint CroppingWidth;
-    mgint CroppingHeight;    
+    mgint CroppingHeight;
     mgfloat LeftSideBearing;
     mgfloat Width;
     mgfloat RightSideBearing;
+};
+
+struct MGF_PageUpdate
+{
+    mgint PageIndex;
+    mgbyte* AtlasRgba;
+    mgint AtlasWidth;
+    mgint AtlasHeight;
+    mgbool AtlasRebuilt;
 };
 
 MG_EXPORT mgbool MGF_BakeSpriteFont(
@@ -59,13 +79,15 @@ MG_EXPORT mgbool MGF_RuntimeFont_EnsureGlyphs(
     mgint size,
     MGF_CharacterRegion* characterRegions,
     mgint characterRegionCount,
-    mgbyte*& atlasRgba,
-    mgint& atlasWidth,
-    mgint& atlasHeight,
-    mgbool& atlasRebuilt,
+    MGF_PageUpdate*& pageUpdates,
+    mgint& pageUpdateCount,
     MGF_Glyph*& glyphs,
     mgint& glyphCount,
     mgint& lineSpacing
 );
+
+MG_EXPORT mgint MGF_RuntimeFont_GetLastErrorCode(MGF_RuntimeFont* runtimeFont);
+
+MG_EXPORT const char* MGF_RuntimeFont_GetLastErrorMessage(MGF_RuntimeFont* runtimeFont);
 
 MG_EXPORT void MGF_Free(void* resource);

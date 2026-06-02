@@ -56,7 +56,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     [Test]
     public void FromFile_EmptyCharacterRegions_ReturnsDynamicSpriteFont()
     {
-        DynamicSpriteFont font = DynamicSpriteFont.FromFile(gd, Paths.Font("IBMPlexSans-Regular.ttf"), 32.0f, Array.Empty<CharacterRegion>());
+        using DynamicSpriteFont font = DynamicSpriteFont.FromFile(gd, Paths.Font("IBMPlexSans-Regular.ttf"), 32.0f, Array.Empty<CharacterRegion>());
 
         Assert.That(font, Is.Not.Null);
     }
@@ -64,7 +64,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     [Test]
     public void FromFile_ValidArguments_SetsInitialSize()
     {
-        DynamicSpriteFont font = DynamicSpriteFont.FromFile(gd, Paths.Font("IBMPlexSans-Regular.ttf"), 32.0f, Array.Empty<CharacterRegion>());
+        using DynamicSpriteFont font = DynamicSpriteFont.FromFile(gd, Paths.Font("IBMPlexSans-Regular.ttf"), 32.0f, Array.Empty<CharacterRegion>());
 
         Assert.That(font.Size, Is.EqualTo(32.0f));
     }
@@ -107,7 +107,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.That(font, Is.Not.Null);
         }
@@ -118,7 +118,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.That(font.Size, Is.EqualTo(32.0f));
         }
@@ -129,7 +129,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.Throws<ArgumentOutOfRangeException>(() => font.Size = 0.0f);
         }
@@ -140,7 +140,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.Throws<ArgumentOutOfRangeException>(() => font.Size = -1.0f);
         }
@@ -151,7 +151,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             font.Size = 16.0f;
 
@@ -164,7 +164,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.Throws<ArgumentOutOfRangeException>(() => font.Size = float.NaN);
         }
@@ -175,7 +175,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.Throws<ArgumentOutOfRangeException>(() => font.Size = float.PositiveInfinity);
         }
@@ -186,7 +186,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.Throws<ArgumentOutOfRangeException>(() => font.Size = float.NegativeInfinity);
         }
@@ -197,7 +197,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Vector2 size = font.MeasureString(string.Empty);
 
@@ -210,7 +210,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.Throws<ArgumentNullException>(() => font.MeasureString((string)null!));
         }
@@ -221,7 +221,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Vector2 size = font.MeasureString("abc");
 
@@ -234,7 +234,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Vector2 size = font.MeasureString(new StringBuilder());
 
@@ -247,7 +247,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Assert.Throws<ArgumentNullException>(() => font.MeasureString((StringBuilder)null!));
         }
@@ -258,7 +258,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             Vector2 size = font.MeasureString(new StringBuilder("abc"));
 
@@ -271,7 +271,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
 
             Vector2 smallSize = font.MeasureString("abc");
 
@@ -287,7 +287,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
 
             Vector2 smallSize = font.MeasureString("abc");
 
@@ -306,7 +306,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
 
             font.MeasureString("a");
             Texture2D initialTexture = font.Texture;
@@ -328,7 +328,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 16.0f, Array.Empty<CharacterRegion>());
 
             Vector2 smallSize = font.MeasureString(new StringBuilder("abc"));
 
@@ -345,7 +345,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         using (Stream stream = OpenRuntimeFontStream())
         using (SpriteBatch spriteBatch = new SpriteBatch(gd))
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             spriteBatch.Begin();
             Assert.DoesNotThrow(() => spriteBatch.DrawString(font, "abc", Vector2.Zero, Color.White));
@@ -359,7 +359,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         using (Stream stream = OpenRuntimeFontStream())
         using (SpriteBatch spriteBatch = new SpriteBatch(gd))
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             spriteBatch.Begin();
             Assert.DoesNotThrow(() => spriteBatch.DrawString(font, new StringBuilder("abc"), Vector2.Zero, Color.White));
@@ -373,7 +373,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         using (Stream stream = OpenRuntimeFontStream())
         using (SpriteBatch spriteBatch = new SpriteBatch(gd))
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             spriteBatch.Begin();
             Assert.DoesNotThrow(() =>
@@ -388,7 +388,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         using (Stream stream = OpenRuntimeFontStream())
         using (SpriteBatch spriteBatch = new SpriteBatch(gd))
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             spriteBatch.Begin();
             Assert.DoesNotThrow(() =>
@@ -403,7 +403,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         using (Stream stream = OpenRuntimeFontStream())
         using (SpriteBatch spriteBatch = new SpriteBatch(gd))
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             spriteBatch.Begin();
             Assert.DoesNotThrow(() =>
@@ -418,7 +418,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         using (Stream stream = OpenRuntimeFontStream())
         using (SpriteBatch spriteBatch = new SpriteBatch(gd))
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             spriteBatch.Begin();
             Assert.DoesNotThrow(() =>
@@ -433,7 +433,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         using (Stream stream = OpenRuntimeFontStream())
         using (SpriteBatch spriteBatch = new SpriteBatch(gd))
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             spriteBatch.Begin();
             Assert.DoesNotThrow(() =>
@@ -448,7 +448,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
         using (Stream stream = OpenRuntimeFontStream())
         using (SpriteBatch spriteBatch = new SpriteBatch(gd))
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
 
             spriteBatch.Begin();
             Assert.DoesNotThrow(() =>
@@ -462,7 +462,7 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     {
         using (Stream stream = OpenRuntimeFontStream())
         {
-            DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, Array.Empty<CharacterRegion>());
             string text = "abc\nxyz";
 
             Vector2 stringSize = font.MeasureString(text);
@@ -475,6 +475,11 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     private static Stream OpenRuntimeFontStream()
     {
         return File.OpenRead(Paths.Font("IBMPlexSans-Regular.ttf"));
+    }
+
+    private static Stream OpenPagingFontStream()
+    {
+        return File.OpenRead(Paths.Font("NotoSansJP-Regular.ttf"));
     }
 #endif
 }
