@@ -28,7 +28,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         }
 
         CharacterRegion[] characterRegions = BuildCharacterRegions(missingCharacters);
-        EnsureRuntimeGlyphs(_runtimeState,
+        EnsureRuntimeGlyphs(_fontHandle,
                             rasterizedSize,
                             characterRegions,
                             out MGF_PageUpdate* pageUpdates,
@@ -108,7 +108,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         return dynamicGlyphs;
     }
 
-    private static unsafe DynamicSpriteFontRuntimeState CreateRuntimeState(byte[] fontData)
+    private static unsafe FontHandle CreateFontHandle(byte[] fontData)
     {
         GCHandle fontDataHandle = default;
 
@@ -121,7 +121,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
                 throw new InvalidOperationException("Failed to create a runtime DynamicSpriteFont from the supplied font data.");
             }
 
-            return new DynamicSpriteFontRuntimeState(runtimeFont);
+            return new FontHandle(runtimeFont);
         }
         finally
         {
@@ -132,7 +132,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         }
     }
 
-    private static unsafe void EnsureRuntimeGlyphs(DynamicSpriteFontRuntimeState runtimeState,
+    private static unsafe void EnsureRuntimeGlyphs(FontHandle fontHandle,
                                                    int size,
                                                    CharacterRegion[] runtimeRegions,
                                                    out MGF_PageUpdate* pageUpdates,
@@ -154,7 +154,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
             regionHandle = GCHandle.Alloc(nativeRegions, GCHandleType.Pinned);
 
-            if (!MGF.RuntimeFont_EnsureGlyphs(runtimeState.Handle,
+            if (!MGF.RuntimeFont_EnsureGlyphs(fontHandle.Handle,
                                              size,
                                              (MGF_CharacterRegion*)regionHandle.AddrOfPinnedObject(),
                                              nativeRegions.Length,
@@ -164,7 +164,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
                                              out glyphCount,
                                              out lineSpacing))
             {
-                ThrowRuntimeGlyphUpdateException(runtimeState);
+                ThrowRuntimeGlyphUpdateException(fontHandle);
             }
 
             if (pageUpdateCount < 0 || glyphCount <= 0)
@@ -396,10 +396,10 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         }
     }
 
-    private static unsafe void ThrowRuntimeGlyphUpdateException(DynamicSpriteFontRuntimeState runtimeState)
+    private static unsafe void ThrowRuntimeGlyphUpdateException(FontHandle fontHandle)
     {
-        MGF_RuntimeFontErrorCode errorCode = (MGF_RuntimeFontErrorCode)MGF.RuntimeFont_GetLastErrorCode(runtimeState.Handle);
-        string message = Marshal.PtrToStringAnsi(MGF.RuntimeFont_GetLastErrorMessage(runtimeState.Handle))
+        MGF_RuntimeFontErrorCode errorCode = (MGF_RuntimeFontErrorCode)MGF.RuntimeFont_GetLastErrorCode(fontHandle.Handle);
+        string message = Marshal.PtrToStringAnsi(MGF.RuntimeFont_GetLastErrorMessage(fontHandle.Handle))
             ?? "Failed to update a runtime DynamicSpriteFont from the supplied font data.";
 
         if (errorCode == MGF_RuntimeFontErrorCode.OutOfMemory)
@@ -418,7 +418,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         throw new PlatformNotSupportedException("Runtime SpriteFont baking is currently implemented only for MonoGame.Framework.Native.");
     }
 
-    private static DynamicSpriteFontRuntimeState CreateRuntimeState(byte[] fontData)
+    private static FontHandle CreateFontHandle(byte[] fontData)
     {
         throw new PlatformNotSupportedException("Runtime SpriteFont baking is currently implemented only for MonoGame.Framework.Native.");
     }

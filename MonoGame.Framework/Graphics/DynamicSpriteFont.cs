@@ -29,7 +29,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
     private readonly Dictionary<int, PreparedTextFont> _preparedTextFontsBySize;
     private readonly Dictionary<int, Texture2D> _texturesByPage;
-    private readonly DynamicSpriteFontRuntimeState _runtimeState;
+    private readonly FontHandle _fontHandle;
     private char? _defaultCharacter;
     private int _currentPageIndex;
     private float _size;
@@ -106,14 +106,19 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
     private DynamicSpriteFont(GraphicsDevice graphicsDevice,
                               byte[] fontData,
-                              DynamicSpriteFontRuntimeState runtimeState,
+                              FontHandle fontHandle,
                               float size,
                               CharacterRegion[] characterRegions)
     {
+        if(fontHandle == null)
+        {
+            throw new ArgumentNullException(nameof(fontHandle));
+        }
+
         GraphicsDevice = graphicsDevice;
         _fontData = fontData;
         _glyphBoundsByPage = new Dictionary<int, Dictionary<long, Rectangle>>();
-        _runtimeState = runtimeState;
+        _fontHandle = fontHandle;
         _characterRegions = characterRegions;
         _preparedTextFontsBySize = new Dictionary<int, PreparedTextFont>();
         _texturesByPage = new Dictionary<int, Texture2D>();
@@ -247,9 +252,16 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         throw new PlatformNotSupportedException("Runtime SpriteFont baking is currently implemented only for MonoGame.Framework.Native.");
 #else
         List<CharacterRegion> regions = new List<CharacterRegion>(characterRegions);
-        byte[] fontData = ReadFontData(stream);
-        DynamicSpriteFontRuntimeState runtimeState = CreateRuntimeState(fontData);
-        return new DynamicSpriteFont(graphicsDevice, fontData, runtimeState, size, regions.ToArray());
+
+        byte[] fontData;
+        using(MemoryStream memoryStream = new MemoryStream())
+        {
+            stream.CopyTo(memoryStream);
+            fontData = memoryStream.ToArray();
+        }
+
+        FontHandle fontHandle = CreateFontHandle(fontData);
+        return new DynamicSpriteFont(graphicsDevice, fontData, fontHandle, size, regions.ToArray());
 #endif
     }
 
@@ -340,7 +352,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
             return;
         }
 
-        int rasterizedSize = GetRasterizedSize();
+        int rasterizedSize = (int)MathF.Ceiling(_size);
         PreparedTextFont preparedTextFont = GetCurrentPreparedTextFont();
 
 #if NATIVE
@@ -350,7 +362,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
     internal PreparedTextFont GetCurrentPreparedTextFont()
     {
-        int rasterizedSize = GetRasterizedSize();
+        int rasterizedSize = (int)MathF.Ceiling(_size);
         PreparedTextFont preparedTextFont;
         if (_preparedTextFontsBySize.TryGetValue(rasterizedSize, out preparedTextFont))
         {
@@ -366,20 +378,6 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     {
         EnsureGlyphs(ref text);
         return GetCurrentPreparedTextFont().MeasureString(ref text);
-    }
-
-    private static byte[] ReadFontData(Stream stream)
-    {
-        using (MemoryStream memoryStream = new MemoryStream())
-        {
-            stream.CopyTo(memoryStream);
-            return memoryStream.ToArray();
-        }
-    }
-
-    private int GetRasterizedSize()
-    {
-        return (int)MathF.Ceiling(_size);
     }
 
     private PreparedTextFont CreatePreparedTextFont(int currentPageIndex,
@@ -409,7 +407,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
             _texturesByPage.Clear();
             _preparedTextFontsBySize.Clear();
             _glyphBoundsByPage.Clear();
-            _runtimeState.Dispose();
+            _fontHandle.Dispose();
         }
 
         base.Dispose(disposing);
@@ -422,8 +420,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
     private Dictionary<long, Rectangle> GetGlyphBoundsForPage(int pageIndex)
     {
-        Dictionary<long, Rectangle> glyphBounds;
-        if (_glyphBoundsByPage.TryGetValue(pageIndex, out glyphBounds))
+        if (_glyphBoundsByPage.TryGetValue(pageIndex, out Dictionary<long, Rectangle> glyphBounds))
         {
             return glyphBounds;
         }
@@ -440,8 +437,8 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         for (int i = 0; i < glyphs.Length; i++)
         {
             FontGlyph glyph = glyphs[i];
-            Dictionary<long, Rectangle> glyphBounds;
-            if (!_glyphBoundsByPage.TryGetValue(glyph.PageIndex, out glyphBounds))
+            
+            if (!_glyphBoundsByPage.TryGetValue(glyph.PageIndex, out Dictionary<long, Rectangle> glyphBounds))
             {
                 glyphBounds = new Dictionary<long, Rectangle>();
                 _glyphBoundsByPage.Add(glyph.PageIndex, glyphBounds);
@@ -562,12 +559,12 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         }
     }
 
-    internal sealed unsafe class DynamicSpriteFontRuntimeState : IDisposable
+    private sealed unsafe class FontHandle : IDisposable
     {
-        public MGF_RuntimeFont* Handle;
+        public readonly MGF_RuntimeFont* Handle;
         private bool _isDisposed;
 
-        public DynamicSpriteFontRuntimeState(MGF_RuntimeFont* handle)
+        public FontHandle(MGF_RuntimeFont* handle)
         {
             if (handle == null)
             {
@@ -577,8 +574,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
             Handle = handle;
         }
 
-        ~DynamicSpriteFontRuntimeState() => Dispose(false);
-
+        ~FontHandle() => Dispose(false);
 
         public void Dispose()
         {
@@ -596,7 +592,6 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
             if (Handle != null)
             {
                 MGF.RuntimeFont_Destroy(Handle);
-                Handle = null;
             }
 
             _isDisposed = true;
