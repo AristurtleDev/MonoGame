@@ -50,6 +50,30 @@ function common(project_name)
     includedirs {"include", "../../external/stb"}
 end
 
+function freetype()
+    defines { "FT2_BUILD_LIBRARY" }
+
+    files {
+        "../../external/freetype/src/base/ftsystem.c",
+        "../../external/freetype/src/base/ftinit.c",
+        "../../external/freetype/src/base/ftdebug.c",
+        "../../external/freetype/src/base/ftbase.c",
+        "../../external/freetype/src/base/ftbitmap.c",
+        "../../external/freetype/src/base/ftmm.c",
+        "../../external/freetype/src/truetype/truetype.c",
+        "../../external/freetype/src/cff/cff.c",
+        "../../external/freetype/src/sfnt/sfnt.c",
+        "../../external/freetype/src/smooth/smooth.c",
+        "../../external/freetype/src/gzip/ftgzip.c",
+        "../../external/freetype/src/psaux/psaux.c",
+        "../../external/freetype/src/psnames/psnames.c"
+    }
+
+    includedirs {
+        "../../external/freetype/include"
+    }
+end
+
 -- SDL is supported on all desktop platforms.
 function sdl2()
     defines {"MG_SDL2"}
@@ -162,6 +186,7 @@ end
 
 project "desktopvk"
 common("desktopvk")
+freetype()
 sdl2()
 vulkan()
 faudio()
@@ -170,6 +195,7 @@ configs()
 if os.target() == "windows" then
     project "windowsdx"
     common("windowsdx")
+    freetype()
     sdl2()
     directx12()
     xaudio()
