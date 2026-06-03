@@ -363,7 +363,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     internal PreparedTextFont GetCurrentPreparedTextFont()
     {
         int rasterizedSize = (int)MathF.Ceiling(_size);
-        
+
         if (_preparedTextFontsBySize.TryGetValue(rasterizedSize, out PreparedTextFont preparedTextFont))
         {
             return preparedTextFont;
@@ -468,7 +468,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
             throw new ArgumentException(UnresolvableCharacter);
         }
 
-        if (!TryGetDefaultGlyphIndex(GetCurrentPreparedTextFont(), defaultCharacter, out _))
+        if (!GetCurrentPreparedTextFont().TryGetGlyphIndex(defaultCharacter, out _))
         {
             throw new ArgumentException(UnresolvableCharacter);
         }
@@ -493,23 +493,15 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     {
         foreach (PreparedTextFont preparedTextFont in _preparedTextFontsBySize.Values)
         {
-            preparedTextFont.UpdateDefaultGlyphIndex(GetDefaultGlyphIndex(preparedTextFont));
-        }
-    }
+            int defaultGlyphIndex = -1;
+            
+            if (_defaultCharacter.HasValue)
+            {
+                preparedTextFont.TryGetGlyphIndex(_defaultCharacter.Value, out defaultGlyphIndex);
+            }
 
-    private int GetDefaultGlyphIndex(PreparedTextFont preparedTextFont)
-    {
-        if (!_defaultCharacter.HasValue)
-        {
-            return -1;
+            preparedTextFont.UpdateDefaultGlyphIndex(defaultGlyphIndex);
         }
-
-        if (TryGetDefaultGlyphIndex(preparedTextFont, _defaultCharacter.Value, out int defaultGlyphIndex))
-        {
-            return defaultGlyphIndex;
-        }
-
-        return -1;
     }
 
     private static bool TryGetDefaultGlyphIndex(FontGlyph[] glyphs, char defaultCharacter, out int defaultGlyphIndex)
@@ -538,17 +530,6 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
         defaultGlyphIndex = alternateIndex;
         return alternateIndex != -1;
-    }
-
-    private static bool TryGetDefaultGlyphIndex(PreparedTextFont preparedTextFont, char defaultCharacter, out int defaultGlyphIndex)
-    {
-        if(preparedTextFont.TryGetGlyphIndex(defaultCharacter, out defaultGlyphIndex))
-        {
-            return true;
-        }
-
-        defaultGlyphIndex = -1;
-        return false;
     }
 
     private static void ValidateSize(float size, string paramName)

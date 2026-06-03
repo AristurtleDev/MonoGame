@@ -325,7 +325,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         for (int i = 0; i < glyphs.Length; i++)
         {
             FontGlyph glyph = glyphs[i];
-            
+
             if (!glyphsBySize.TryGetValue(glyph.Size, out List<FontGlyph> glyphList))
             {
                 glyphList = new List<FontGlyph>();
@@ -349,7 +349,14 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
                 pair.Value.Update(_texturesByPage, _currentPageIndex, Array.Empty<FontGlyph>(), lineSpacing);
             }
 
-            pair.Value.UpdateDefaultGlyphIndex(GetDefaultGlyphIndex(pair.Value));
+            int defaultGlyphIndex = -1;
+
+            if (_defaultCharacter.HasValue)
+            {
+                pair.Value.TryGetGlyphIndex(_defaultCharacter.Value, out defaultGlyphIndex);
+            }
+
+            pair.Value.UpdateDefaultGlyphIndex(defaultGlyphIndex);
         }
 
         foreach (KeyValuePair<int, List<FontGlyph>> pair in glyphsBySize)
