@@ -123,6 +123,23 @@ internal sealed class DynamicSpriteFontTest : GraphicsDeviceTestFixtureBase
     }
 
     [Test]
+    public void FromStream_WithCharacterRegions_WarmsGlyphsAtCreation()
+    {
+        using (Stream stream = OpenRuntimeFontStream())
+        {
+            CharacterRegion[] characterRegions = new[] { new CharacterRegion('a', 'c') };
+            using DynamicSpriteFont font = DynamicSpriteFont.FromStream(gd, stream, 32.0f, characterRegions);
+
+            Texture2D initialTexture = font.GetTexture(0);
+            font.MeasureString("abc");
+
+            Assert.That(initialTexture.Width, Is.GreaterThan(1));
+            Assert.That(initialTexture.Height, Is.GreaterThan(1));
+            Assert.That(font.GetTexture(0), Is.SameAs(initialTexture));
+        }
+    }    
+
+    [Test]
     public void FromStream_ValidArguments_SetsInitialSize()
     {
         using (Stream stream = OpenRuntimeFontStream())

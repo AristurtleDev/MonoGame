@@ -37,6 +37,41 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
                             out int glyphCount,
                             out int lineSpacing);
 
+        ApplyRuntimeGlyphUpdateResults(rasterizedSize,
+                                       pageUpdates,
+                                       pageUpdateCount,
+                                       glyphs,
+                                       glyphCount,
+                                       lineSpacing);
+    }
+
+    private unsafe void PlatformWarmGlyphs(int rasterizedSize, CharacterRegion[] characterRegions)
+    {
+        EnsureRuntimeGlyphs(_fontHandle,
+                            rasterizedSize,
+                            characterRegions,
+                            out MGF_PageUpdate* pageUpdates,
+                            out int pageUpdateCount,
+                            out MGF_Glyph* glyphs,
+                            out int glyphCount,
+                            out int lineSpacing);
+
+        ApplyRuntimeGlyphUpdateResults(rasterizedSize,
+                                       pageUpdates,
+                                       pageUpdateCount,
+                                       glyphs,
+                                       glyphCount,
+                                       lineSpacing);
+    }
+
+    private unsafe void ApplyRuntimeGlyphUpdateResults(int rasterizedSize,
+                                                       MGF_PageUpdate* pageUpdates,
+                                                       int pageUpdateCount,
+                                                       MGF_Glyph* glyphs,
+                                                       int glyphCount,
+                                                       int lineSpacing)
+    {
+
         int currentPageIndex = _currentPageIndex;
         for (int i = 0; i < pageUpdateCount; i++)
         {
@@ -420,6 +455,11 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     private void PlatformEnsureGlyphs(int rasterizedSize,
                                       PreparedTextFont preparedTextFont,
                                       ref FontCharacterSource text)
+    {
+        throw new PlatformNotSupportedException("Runtime SpriteFont baking is currently implemented only for MonoGame.Framework.Native.");
+    }
+
+    private void PlatformWarmGlyphs(int rasterizedSize, CharacterRegion[] characterRegions)
     {
         throw new PlatformNotSupportedException("Runtime SpriteFont baking is currently implemented only for MonoGame.Framework.Native.");
     }
