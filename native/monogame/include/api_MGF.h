@@ -9,7 +9,7 @@
 // Opaque runtime font handle used by incremental glyph baking API.
 struct MGF_RuntimeFont;
 
-// Error codes reported by MFG_Runtime_GetLastErrorCode after a runtime call fails.
+// Error codes reported by MGG_RuntimeFont_GetLastErrorCode after a runtime call fails.
 enum MGF_RuntimeFontErrorCode
 {
     MGF_RuntimeFontErrorCode_None = 0,
@@ -46,7 +46,7 @@ struct MGF_Glyph
     mgfloat RightSideBearing;
 };
 
-// Atlas data returned for each page touch by the current runtime glyph update.
+// Atlas data returned for each page touched by the current runtime glyph update.
 struct MGF_PageUpdate
 {
     mgint PageIndex;
@@ -68,7 +68,7 @@ struct MGF_PageUpdate
  * @param dataBytes Number of bytes available at `data`.
  * @param size Requested glyph height in pixels. Must be greater than zero.
  * @param characterRegions Inclusive character ranges to bake.
- * @param characterRegionCount Numbers of entries in `characterRegions`.
+ * @param characterRegionCount Number of entries in `characterRegions`.
  * @param atlasRgba Receives a tightly packed RGBA atlas buffer on success.
  * @param atlasWidth Receives the atlas width in pixels.
  * @param atlasHeight Receives the atlas height in pixels.
@@ -98,7 +98,7 @@ MG_EXPORT mgbool MGF_BakeSpriteFont(
  * this call returns.  The returned handle must be destroyed with MGF_RuntimeFont_Destroy.
  *
  * @param data Pointer to the font file bytes.
- * @param dataBytes Number of byte available in `bytes`.
+ * @param dataBytes Number of byte available in `data`.
  * @return A runtime font handle, or `nullptr` when the arguments are invalid or the font cannot
  * be parsed.
  */
@@ -107,7 +107,7 @@ MG_EXPORT MGF_RuntimeFont* MGF_RuntimeFont_Create(
     mgint dataBytes
 );
 
-// Releases a handle created byte MGF_RuntimeFont_Create. Passing `nullptr` is allowed.
+// Releases a handle created by MGF_RuntimeFont_Create. Passing `nullptr` is allowed.
 MG_EXPORT void MGF_RuntimeFont_Destroy(
     MGF_RuntimeFont* runtimeFont
 );
@@ -121,7 +121,7 @@ MG_EXPORT void MGF_RuntimeFont_Destroy(
  * call that mutates `runtimeFont` or until MGF_RuntimeFont_Destroy is called.
  *
  * @param runtimeFont Runtime font handle created by MGF_RuntimeFont_Create.
- * @param size Requsted glyph height in pixels. Must be greater than zero.
+ * @param size Requested glyph height in pixels. Must be greater than zero.
  * @param characterRegions Inclusive character ranges to bake.
  * @param characterRegionCount Number of entries in `characterRegions`.
  * @param pageUpdates Receives the touched atlas pages for this call.
@@ -142,7 +142,7 @@ MG_EXPORT mgbool MGF_RuntimeFont_EnsureGlyphs(
     mgint& lineSpacing
 );
 
-// Returns the last erro code recorded on `runtimeFont`, or InvalidArgument for a null handle.
+// Returns the last error code recorded on `runtimeFont`, or InvalidArgument for a null handle.
 MG_EXPORT mgint MGF_RuntimeFont_GetLastErrorCode(MGF_RuntimeFont* runtimeFont);
 
 // Returns the last error message recorded on `runtimeFont`, or a static message for a null handle.
