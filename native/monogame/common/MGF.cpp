@@ -139,7 +139,7 @@ namespace
         }
 
         // The managed caller can send overlapping ranges.  Sorting and deduplicating keeps the
-        // bake idempotent and avoid repacking the same codepoint more than once per size.
+        // bake idempotent and avoids repacking the same codepoint more than once per size.
         std::sort(characters.begin(), characters.end());
         characters.erase(std::unique(characters.begin(), characters.end()), characters.end());
         return characters;
