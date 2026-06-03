@@ -274,8 +274,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
                                         int glyphCount,
                                         MGF_PageUpdate pageUpdate)
     {
-        Texture2D currentTexture;
-        _texturesByPage.TryGetValue(pageUpdate.PageIndex, out currentTexture);
+        _texturesByPage.TryGetValue(pageUpdate.PageIndex, out Texture2D currentTexture);
 
         Texture2D nextTexture = currentTexture;
         if (currentTexture == null ||
@@ -326,8 +325,8 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         for (int i = 0; i < glyphs.Length; i++)
         {
             FontGlyph glyph = glyphs[i];
-            List<FontGlyph> glyphList;
-            if (!glyphsBySize.TryGetValue(glyph.Size, out glyphList))
+            
+            if (!glyphsBySize.TryGetValue(glyph.Size, out List<FontGlyph> glyphList))
             {
                 glyphList = new List<FontGlyph>();
                 glyphsBySize.Add(glyph.Size, glyphList);

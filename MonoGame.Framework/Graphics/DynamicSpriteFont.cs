@@ -363,8 +363,8 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     internal PreparedTextFont GetCurrentPreparedTextFont()
     {
         int rasterizedSize = (int)MathF.Ceiling(_size);
-        PreparedTextFont preparedTextFont;
-        if (_preparedTextFontsBySize.TryGetValue(rasterizedSize, out preparedTextFont))
+        
+        if (_preparedTextFontsBySize.TryGetValue(rasterizedSize, out PreparedTextFont preparedTextFont))
         {
             return preparedTextFont;
         }
