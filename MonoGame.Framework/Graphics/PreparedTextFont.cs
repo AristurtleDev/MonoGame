@@ -258,6 +258,9 @@ internal sealed class PreparedTextFont
         return _glyphIndices.TryGetValue(alternate, out index);
     }
 
+    // Runtime glyph baking needs to know whether this exact codepoint is already preset,
+    // not whether SpriteFont-style alternate-case fallback could resolve it for drawing
+    // like TryGetGlyphIndex does above
     public bool TryGetGlyphIndexExact(char c, out int index)
     {
         return _glyphIndices.TryGetValue(c, out index);
