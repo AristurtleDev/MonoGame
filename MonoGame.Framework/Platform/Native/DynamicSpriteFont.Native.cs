@@ -150,10 +150,15 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         try
         {
             fontDataHandle = GCHandle.Alloc(fontData, GCHandleType.Pinned);
-            MGF_RuntimeFont* runtimeFont = MGF.RuntimeFont_Create((byte*)fontDataHandle.AddrOfPinnedObject(), fontData.Length);
-            if (runtimeFont == null)
+            if (!MGF.RuntimeFont_Create((byte*)fontDataHandle.AddrOfPinnedObject(),
+                                       fontData.Length,
+                                       out MGF_RuntimeFont* runtimeFont,
+                                       out int errorCode,
+                                       out nint errorMessage))
             {
-                throw new InvalidOperationException("Failed to create a runtime DynamicSpriteFont from the supplied font data.");
+                ThrowRuntimeFontCreateException(errorCode,
+                                               errorMessage,
+                                               "Failed to create a runtime DynamicSpriteFont from the supplied font data.");
             }
 
             return new FontHandle(runtimeFont);
@@ -439,9 +444,29 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
     private static unsafe void ThrowRuntimeGlyphUpdateException(FontHandle fontHandle)
     {
-        MGF_RuntimeFontErrorCode errorCode = (MGF_RuntimeFontErrorCode)MGF.RuntimeFont_GetLastErrorCode(fontHandle.Handle);
-        string message = Marshal.PtrToStringAnsi(MGF.RuntimeFont_GetLastErrorMessage(fontHandle.Handle))
-            ?? "Failed to update a runtime DynamicSpriteFont from the supplied font data.";
+        ThrowRuntimeFontException(fontHandle.Handle,
+                                  "Failed to update a runtime DynamicSpriteFont from the supplied font data.");
+    }
+
+    private static void ThrowRuntimeFontCreateException(int errorCodeValue, nint errorMessage, string fallbackMessage)
+    {
+        MGF_RuntimeFontErrorCode errorCode = (MGF_RuntimeFontErrorCode)errorCodeValue;
+        string message = Marshal.PtrToStringAnsi(errorMessage)
+            ?? fallbackMessage;
+
+        if (errorCode == MGF_RuntimeFontErrorCode.OutOfMemory)
+        {
+            throw new OutOfMemoryException(message);
+        }
+
+        throw new InvalidOperationException(message);
+    }
+
+    private static unsafe void ThrowRuntimeFontException(MGF_RuntimeFont* runtimeFont, string fallbackMessage)
+    {
+        MGF_RuntimeFontErrorCode errorCode = (MGF_RuntimeFontErrorCode)MGF.RuntimeFont_GetLastErrorCode(runtimeFont);
+        string message = Marshal.PtrToStringAnsi(MGF.RuntimeFont_GetLastErrorMessage(runtimeFont))
+            ?? fallbackMessage;
 
         if (errorCode == MGF_RuntimeFontErrorCode.OutOfMemory)
         {

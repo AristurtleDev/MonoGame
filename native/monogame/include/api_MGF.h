@@ -99,12 +99,17 @@ MG_EXPORT mgbool MGF_BakeSpriteFont(
  *
  * @param data Pointer to the font file bytes.
  * @param dataBytes Number of byte available in `data`.
- * @return A runtime font handle, or `nullptr` when the arguments are invalid or the font cannot
- * be parsed.
+ * @param runtimeFont Receives the created runtime font handle on success, or `nullptr` on failure.
+ * @param errorCode Receives the creation failure code on failure, or None on success.
+ * @param errorMessage Receives a static creation failure message on failure, or `nullptr` on success.
+ * @return `true` when the runtime font was created successfully.
  */
-MG_EXPORT MGF_RuntimeFont* MGF_RuntimeFont_Create(
+MG_EXPORT mgbool MGF_RuntimeFont_Create(
     mgbyte* data,
-    mgint dataBytes
+    mgint dataBytes,
+    MGF_RuntimeFont*& runtimeFont,
+    mgint& errorCode,
+    const char*& errorMessage
 );
 
 // Releases a handle created by MGF_RuntimeFont_Create. Passing `nullptr` is allowed.

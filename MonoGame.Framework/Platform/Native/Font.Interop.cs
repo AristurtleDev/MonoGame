@@ -61,7 +61,12 @@ internal unsafe struct MGF_PageUpdate
 internal static unsafe class MGF
 {
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = "MGF_RuntimeFont_Create", ExactSpelling = true)]
-    public static extern MGF_RuntimeFont* RuntimeFont_Create(byte* data, int dataBytes);
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool RuntimeFont_Create(byte* data,
+                                                 int dataBytes,
+                                                 out MGF_RuntimeFont* runtimeFont,
+                                                 out int errorCode,
+                                                 out nint errorMessage);
 
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = "MGF_RuntimeFont_Destroy", ExactSpelling = true)]
     public static extern void RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont);
@@ -82,7 +87,7 @@ internal static unsafe class MGF
     public static extern int RuntimeFont_GetLastErrorCode(MGF_RuntimeFont* runtimeFont);
 
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = "MGF_RuntimeFont_GetLastErrorMessage", ExactSpelling = true)]
-    public static extern nint RuntimeFont_GetLastErrorMessage(MGF_RuntimeFont* runtimeFont);    
+    public static extern nint RuntimeFont_GetLastErrorMessage(MGF_RuntimeFont* runtimeFont);
 
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = "MGF_BakeSpriteFont", ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.U1)]

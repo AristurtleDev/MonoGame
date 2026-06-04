@@ -11,6 +11,7 @@
 #include <cstring>
 #include <iterator>
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -19,8 +20,8 @@
 #define STB_RECT_PACK_IMPLEMENTATION
 #include "stb_rect_pack.h"
 
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 struct GlyphBuildInfo
 {
@@ -41,7 +42,6 @@ struct GlyphBuildInfo
 struct RuntimeSizeInfo
 {
     mgint Size;
-    float Scale;
     mgint AscentPixels;
     mgint LineSpacing;
 };
@@ -87,7 +87,8 @@ struct RuntimeAtlasPage
 struct MGF_RuntimeFont
 {
     std::vector<mgbyte> FontData;
-    stbtt_fontinfo Font;
+    FT_Library FreeTypeLibrary;
+    FT_Face FreeTypeFace;
     std::vector<RuntimeAtlasPage> Pages;
     std::vector<MGF_PageUpdate> PageUpdates;
     std::vector<MGF_Glyph> GlyphResults;
@@ -103,6 +104,19 @@ namespace
     constexpr mgint MinimumAtlasSize = 256;
     constexpr mgint MaximumAtlasSize = 4096;
 
+    mgbool fail_create(mgint errorCode,
+                       const char* message,
+                       MGF_RuntimeFont*& runtimeFont,
+                       mgint& createErrorCode,
+                       const char*& createErrorMessage)
+    {
+        createErrorCode = errorCode;
+        createErrorMessage = message;
+        delete runtimeFont;
+        runtimeFont = nullptr;
+        return false;
+    }
+
     void clear_error(MGF_RuntimeFont& runtimeFont)
     {
         runtimeFont.LastErrorCode = MGF_RuntimeFontErrorCode_None;
@@ -114,6 +128,59 @@ namespace
         runtimeFont.LastErrorCode = errorCode;
         runtimeFont.LastErrorMessage = message;
         return false;
+    }
+
+    mgint ceil_pixels_from_26dot6(FT_Pos value)
+    {
+        return static_cast<mgint>((value + 63) >> 6);
+    }
+
+    mgfloat pixels_from_26dot6(FT_Pos value)
+    {
+        return static_cast<mgfloat>(value) / 64.0f;
+    }
+
+    void copy_glyph_bitmap(const FT_Bitmap& bitmap, std::vector<mgbyte>& pixels)
+    {
+        const mgint width = static_cast<mgint>(bitmap.width);
+        const mgint height = static_cast<mgint>(bitmap.rows);
+        if (width <= 0 || height <= 0)
+        {
+            pixels.clear();
+            return;
+        }
+
+        if (bitmap.buffer == nullptr)
+            throw std::runtime_error("DynamicSpriteFont glyph rendering returned a null FreeType bitmap buffer.");
+
+        pixels.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
+
+        const mgint sourcePitch = bitmap.pitch >= 0 ? bitmap.pitch : -bitmap.pitch;
+        for (mgint row = 0; row < height; ++row)
+        {
+            const mgint sourceRowIndex = bitmap.pitch >= 0 ? row : (height - 1 - row);
+            const mgbyte* sourceRow = bitmap.buffer + static_cast<size_t>(sourceRowIndex) * sourcePitch;
+            mgbyte* destinationRow = pixels.data() + static_cast<size_t>(row) * width;
+
+            if (bitmap.pixel_mode == FT_PIXEL_MODE_GRAY)
+            {
+                memcpy(destinationRow, sourceRow, static_cast<size_t>(width));
+                continue;
+            }
+
+            if (bitmap.pixel_mode == FT_PIXEL_MODE_MONO)
+            {
+                for (mgint column = 0; column < width; ++column)
+                {
+                    const mgbyte mask = static_cast<mgbyte>(0x80 >> (column & 7));
+                    destinationRow[column] = (sourceRow[column >> 3] & mask) != 0 ? 255 : 0;
+                }
+
+                continue;
+            }
+
+            throw std::runtime_error("DynamicSpriteFont glyph rendering produced an unsupported FreeType bitmap format.");
+        }
     }
 
     mgint next_power_of_two(mgint value)
@@ -145,49 +212,70 @@ namespace
         return characters;
     }
 
-    RuntimeSizeInfo& ensure_size_info(MGF_RuntimeFont& runtimeFont, mgint size)
+    mgbool ensure_size_info(MGF_RuntimeFont& runtimeFont, mgint size, RuntimeSizeInfo*& sizeInfo)
     {
-        auto sizeIterator = runtimeFont.SizeLookup.find(size);
-        if (sizeIterator != runtimeFont.SizeLookup.end())
-            return sizeIterator->second;
+        sizeInfo = nullptr;
 
-        RuntimeSizeInfo sizeInfo = {};
-        sizeInfo.Size = size;
-        sizeInfo.Scale = stbtt_ScaleForPixelHeight(&runtimeFont.Font, static_cast<float>(size));
-
-        int ascent;
-        int descent;
-        int lineGap;
-        stbtt_GetFontVMetrics(&runtimeFont.Font, &ascent, &descent, &lineGap);
-
-        sizeInfo.AscentPixels = static_cast<mgint>(std::ceil(ascent * sizeInfo.Scale));
-        sizeInfo.LineSpacing = static_cast<mgint>(std::ceil((ascent - descent + lineGap) * sizeInfo.Scale));
-        if (sizeInfo.LineSpacing <= 0)
-            sizeInfo.LineSpacing = size;
-
-        const auto result = runtimeFont.SizeLookup.emplace(size, sizeInfo);
-        return result.first->second;
-    }
-
-    mgbool build_glyph(const stbtt_fontinfo& font, const RuntimeSizeInfo& sizeInfo, mgchar character, GlyphBuildInfo& glyph)
-    {
-        if (stbtt_FindGlyphIndex(&font, character) == 0)
+        if (runtimeFont.FreeTypeFace == nullptr)
             return false;
 
-        int advanceWidth;
-        int leftSideBearing;
-        int x0;
-        int y0;
-        int x1;
-        int y1;
+        if (FT_Set_Pixel_Sizes(runtimeFont.FreeTypeFace, 0, static_cast<FT_UInt>(size)) != FT_Err_Ok)
+            return false;
 
-        stbtt_GetCodepointHMetrics(&font, character, &advanceWidth, &leftSideBearing);
-        stbtt_GetCodepointBitmapBox(&font, character, sizeInfo.Scale, sizeInfo.Scale, &x0, &y0, &x1, &y1);
+        auto sizeIterator = runtimeFont.SizeLookup.find(size);
+        if (sizeIterator != runtimeFont.SizeLookup.end())
+        {
+            sizeInfo = &sizeIterator->second;
+            return true;
+        }
 
-        const mgint width = x1 - x0;
-        const mgint height = y1 - y0;
-        const mgint bitmapTop = -y0;
-        const mgfloat advancePixels = advanceWidth * sizeInfo.Scale;
+        RuntimeSizeInfo newSizeInfo = {};
+        newSizeInfo.Size = size;
+        if (runtimeFont.FreeTypeFace->size == nullptr)
+            return false;
+
+        const FT_Size_Metrics& sizeMetrics = runtimeFont.FreeTypeFace->size->metrics;
+        newSizeInfo.AscentPixels = ceil_pixels_from_26dot6(sizeMetrics.ascender);
+        newSizeInfo.LineSpacing = ceil_pixels_from_26dot6(sizeMetrics.height);
+        if (newSizeInfo.LineSpacing <= 0)
+            newSizeInfo.LineSpacing = size;
+
+        const auto result = runtimeFont.SizeLookup.emplace(size, newSizeInfo);
+        sizeInfo = &result.first->second;
+        return true;
+    }
+
+    mgbool build_glyph(FT_Face freeTypeFace,
+                       const RuntimeSizeInfo& sizeInfo,
+                       mgchar character,
+                       GlyphBuildInfo& glyph)
+    {
+        if (freeTypeFace == nullptr)
+            return false;
+
+        const FT_UInt glyphIndex = FT_Get_Char_Index(freeTypeFace, static_cast<FT_ULong>(character));
+        if (glyphIndex == 0)
+            return false;
+
+        if (FT_Load_Glyph(freeTypeFace, glyphIndex, FT_LOAD_DEFAULT) != FT_Err_Ok)
+            throw std::runtime_error("DynamicSpriteFont glyph metric extraction failed to load a FreeType glyph.");
+
+        FT_GlyphSlot glyphSlot = freeTypeFace->glyph;
+        if (glyphSlot == nullptr)
+            throw std::runtime_error("DynamicSpriteFont glyph metric extraction did not receive a FreeType glyph slot.");
+
+        if (glyphSlot->format != FT_GLYPH_FORMAT_BITMAP &&
+            FT_Render_Glyph(glyphSlot, FT_RENDER_MODE_NORMAL) != FT_Err_Ok)
+        {
+            throw std::runtime_error("DynamicSpriteFont glyph rendering failed to rasterize a FreeType glyph.");
+        }
+
+        const mgint width = static_cast<mgint>(glyphSlot->bitmap.width);
+        const mgint height = static_cast<mgint>(glyphSlot->bitmap.rows);
+        const mgint bitmapTop = glyphSlot->bitmap_top;
+        const mgfloat leftSideBearing = static_cast<mgfloat>(glyphSlot->bitmap_left);
+        const mgfloat widthValue = static_cast<mgfloat>(width);
+        const mgfloat advancePixels = pixels_from_26dot6(glyphSlot->advance.x);
 
         glyph = {};
         glyph.Character = character;
@@ -195,37 +283,15 @@ namespace
         glyph.Width = width;
         glyph.Height = height;
         glyph.BitmapTop = bitmapTop;
-
-        if (width > 0 && height > 0)
-        {
-            glyph.Pixels.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
-            stbtt_MakeCodepointBitmap(&font,
-                                      glyph.Pixels.data(),
-                                      width,
-                                      height,
-                                      width,
-                                      sizeInfo.Scale,
-                                      sizeInfo.Scale,
-                                      character);
-        }
-
-        if (width > 0)
-        {
-            glyph.LeftSideBearing = static_cast<mgfloat>(x0);
-            glyph.WidthValue = static_cast<mgfloat>(width);
-            glyph.RightSideBearing = advancePixels - (static_cast<mgfloat>(x0) + static_cast<mgfloat>(width));
-        }
-        else
-        {
-            glyph.LeftSideBearing = 0.0f;
-            glyph.WidthValue = 0.0f;
-            glyph.RightSideBearing = advancePixels;
-        }
+        glyph.LeftSideBearing = leftSideBearing;
+        glyph.WidthValue = widthValue;
+        glyph.RightSideBearing = advancePixels - (leftSideBearing + widthValue);
+        copy_glyph_bitmap(glyphSlot->bitmap, glyph.Pixels);
 
         return true;
     }
 
-    std::vector<GlyphBuildInfo> build_glyphs(const stbtt_fontinfo& font,
+    std::vector<GlyphBuildInfo> build_glyphs(FT_Face freeTypeFace,
                                              const RuntimeSizeInfo& sizeInfo,
                                              const std::vector<mgchar>& characters,
                                              const std::unordered_map<GlyphKey, RuntimeGlyphLocation, GlyphKeyHash>& glyphLookup)
@@ -239,7 +305,7 @@ namespace
                 continue;
 
             GlyphBuildInfo glyph = {};
-            if (build_glyph(font, sizeInfo, character, glyph))
+            if (build_glyph(freeTypeFace, sizeInfo, character, glyph))
                 glyphs.push_back(std::move(glyph));
         }
 
@@ -461,9 +527,10 @@ namespace
                 const auto alpha = glyph.Pixels[static_cast<size_t>(row) * glyph.Width + column];
                 const auto atlasIndex = static_cast<size_t>(((glyph.AtlasY + row) * atlasWidth) + glyph.AtlasX + column) * 4;
 
-                // The atlas is exported as RGBA even though stb_truetype gives us a single channel
-                // coverage bitmap.  Replicating coverage into every channel keeps the native output
-                // upload ready for MonoGame's existing texture path without an extra swizzle step.
+                // The atlas is exported as RGBA even though the glyph rasterizer gives us a single
+                // channel coverage bitmap. Replicating coverage into every channel keeps the native
+                // output upload ready for MonoGame's existing texture path without an extra swizzle
+                // step.
                 atlas[atlasIndex + 0] = alpha;
                 atlas[atlasIndex + 1] = alpha;
                 atlas[atlasIndex + 2] = alpha;
@@ -677,8 +744,15 @@ namespace
                             "DynamicSpriteFont glyph update received invalid native arguments.");
             }
 
-            const auto& sizeInfo = ensure_size_info(runtimeFont, size);
-            lineSpacing = sizeInfo.LineSpacing;
+            RuntimeSizeInfo* sizeInfo = nullptr;
+            if (!ensure_size_info(runtimeFont, size, sizeInfo))
+            {
+                return fail(runtimeFont,
+                            MGF_RuntimeFontErrorCode_Unknown,
+                            "DynamicSpriteFont glyph update failed to select a FreeType pixel size for the requested rasterized font size.");
+            }
+
+            lineSpacing = sizeInfo->LineSpacing;
 
             const auto characters = collect_characters(characterRegions, characterRegionCount);
             if (characters.empty())
@@ -688,7 +762,10 @@ namespace
                             "DynamicSpriteFont glyph update did not receive any characters to bake.");
             }
 
-            auto newGlyphs = build_glyphs(runtimeFont.Font, sizeInfo, characters, runtimeFont.GlyphLookup);
+            auto newGlyphs = build_glyphs(runtimeFont.FreeTypeFace,
+                                          *sizeInfo,
+                                          characters,
+                                          runtimeFont.GlyphLookup);
 
             if (newGlyphs.empty())
             {
@@ -795,7 +872,7 @@ namespace
             pageUpdateCount = static_cast<mgint>(runtimeFont.PageUpdates.size());
             glyphs = runtimeFont.GlyphResults.empty() ? nullptr : runtimeFont.GlyphResults.data();
             glyphCount = static_cast<mgint>(runtimeFont.GlyphResults.size());
-            lineSpacing = sizeInfo.LineSpacing;
+            lineSpacing = sizeInfo->LineSpacing;
 
             if (pageUpdates == nullptr || pageUpdateCount <= 0 || glyphs == nullptr || glyphCount <= 0)
             {
@@ -827,33 +904,63 @@ namespace
     }
 }
 
-MGF_RuntimeFont* MGF_RuntimeFont_Create(mgbyte* data, mgint dataBytes)
+mgbool MGF_RuntimeFont_Create(mgbyte* data,
+                             mgint dataBytes,
+                             MGF_RuntimeFont*& runtimeFont,
+                             mgint& errorCode,
+                             const char*& errorMessage)
 {
+    runtimeFont = nullptr;
+    errorCode = MGF_RuntimeFontErrorCode_None;
+    errorMessage = nullptr;
+
     if (data == nullptr || dataBytes <= 0)
-        return nullptr;
+        return fail_create(MGF_RuntimeFontErrorCode_InvalidArgument,
+                           "DynamicSpriteFont runtime font creation requires non-null font data and a positive byte count.",
+                           runtimeFont,
+                           errorCode,
+                           errorMessage);
 
-    auto runtimeFont = new MGF_RuntimeFont();
+    runtimeFont = new MGF_RuntimeFont();
+    runtimeFont->FreeTypeLibrary = nullptr;
+    runtimeFont->FreeTypeFace = nullptr;
     runtimeFont->FontData.assign(data, data + dataBytes);
+    if (FT_Init_FreeType(&runtimeFont->FreeTypeLibrary) != FT_Err_Ok)
+        return fail_create(MGF_RuntimeFontErrorCode_Unknown,
+                           "DynamicSpriteFont runtime font creation failed to initialize FreeType.",
+                           runtimeFont,
+                           errorCode,
+                           errorMessage);
 
-    const auto fontOffset = stbtt_GetFontOffsetForIndex(runtimeFont->FontData.data(), 0);
-    if (fontOffset < 0)
+    if (FT_New_Memory_Face(runtimeFont->FreeTypeLibrary,
+                           runtimeFont->FontData.data(),
+                           static_cast<FT_Long>(runtimeFont->FontData.size()),
+                           0,
+                           &runtimeFont->FreeTypeFace) != FT_Err_Ok)
     {
-        delete runtimeFont;
-        return nullptr;
+        FT_Done_FreeType(runtimeFont->FreeTypeLibrary);
+        runtimeFont->FreeTypeLibrary = nullptr;
+        return fail_create(MGF_RuntimeFontErrorCode_Unknown,
+                           "DynamicSpriteFont runtime font creation failed to create a FreeType face from the supplied font data.",
+                           runtimeFont,
+                           errorCode,
+                           errorMessage);
     }
 
-    runtimeFont->Font = {};
-    if (!stbtt_InitFont(&runtimeFont->Font, runtimeFont->FontData.data(), fontOffset))
-    {
-        delete runtimeFont;
-        return nullptr;
-    }
-
-    return runtimeFont;
+    return true;
 }
 
 void MGF_RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont)
 {
+    if (runtimeFont != nullptr)
+    {
+        if (runtimeFont->FreeTypeFace != nullptr)
+            FT_Done_Face(runtimeFont->FreeTypeFace);
+
+        if (runtimeFont->FreeTypeLibrary != nullptr)
+            FT_Done_FreeType(runtimeFont->FreeTypeLibrary);
+    }
+
     delete runtimeFont;
 }
 
@@ -916,8 +1023,10 @@ mgbool MGF_BakeSpriteFont(mgbyte* data,
     glyphCount = 0;
     lineSpacing = 0;
 
-    auto runtimeFont = MGF_RuntimeFont_Create(data, dataBytes);
-    if (runtimeFont == nullptr)
+    MGF_RuntimeFont* runtimeFont = nullptr;
+    mgint createErrorCode = MGF_RuntimeFontErrorCode_None;
+    const char* createErrorMessage = nullptr;
+    if (!MGF_RuntimeFont_Create(data, dataBytes, runtimeFont, createErrorCode, createErrorMessage))
         return false;
 
     MGF_PageUpdate* runtimePageUpdates = nullptr;
