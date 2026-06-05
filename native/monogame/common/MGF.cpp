@@ -104,19 +104,6 @@ namespace
     constexpr mgint MinimumAtlasSize = 256;
     constexpr mgint MaximumAtlasSize = 4096;
 
-    mgbool fail_create(mgint errorCode,
-                       const char* message,
-                       MGF_RuntimeFont*& runtimeFont,
-                       mgint& createErrorCode,
-                       const char*& createErrorMessage)
-    {
-        createErrorCode = errorCode;
-        createErrorMessage = message;
-        delete runtimeFont;
-        runtimeFont = nullptr;
-        return false;
-    }
-
     void clear_error(MGF_RuntimeFont& runtimeFont)
     {
         runtimeFont.LastErrorCode = MGF_RuntimeFontErrorCode_None;
@@ -904,33 +891,20 @@ namespace
     }
 }
 
-mgbool MGF_RuntimeFont_Create(mgbyte* data,
-                             mgint dataBytes,
-                             MGF_RuntimeFont*& runtimeFont,
-                             mgint& errorCode,
-                             const char*& errorMessage)
+MGF_RuntimeFont* MGF_RuntimeFont_Create(mgbyte* data, mgint dataBytes)
 {
-    runtimeFont = nullptr;
-    errorCode = MGF_RuntimeFontErrorCode_None;
-    errorMessage = nullptr;
-
     if (data == nullptr || dataBytes <= 0)
-        return fail_create(MGF_RuntimeFontErrorCode_InvalidArgument,
-                           "DynamicSpriteFont runtime font creation requires non-null font data and a positive byte count.",
-                           runtimeFont,
-                           errorCode,
-                           errorMessage);
+        return nullptr;
 
-    runtimeFont = new MGF_RuntimeFont();
+    auto runtimeFont = new MGF_RuntimeFont();
     runtimeFont->FreeTypeLibrary = nullptr;
     runtimeFont->FreeTypeFace = nullptr;
     runtimeFont->FontData.assign(data, data + dataBytes);
     if (FT_Init_FreeType(&runtimeFont->FreeTypeLibrary) != FT_Err_Ok)
-        return fail_create(MGF_RuntimeFontErrorCode_Unknown,
-                           "DynamicSpriteFont runtime font creation failed to initialize FreeType.",
-                           runtimeFont,
-                           errorCode,
-                           errorMessage);
+    {
+        delete runtimeFont;
+        return nullptr;
+    }
 
     if (FT_New_Memory_Face(runtimeFont->FreeTypeLibrary,
                            runtimeFont->FontData.data(),
@@ -939,15 +913,11 @@ mgbool MGF_RuntimeFont_Create(mgbyte* data,
                            &runtimeFont->FreeTypeFace) != FT_Err_Ok)
     {
         FT_Done_FreeType(runtimeFont->FreeTypeLibrary);
-        runtimeFont->FreeTypeLibrary = nullptr;
-        return fail_create(MGF_RuntimeFontErrorCode_Unknown,
-                           "DynamicSpriteFont runtime font creation failed to create a FreeType face from the supplied font data.",
-                           runtimeFont,
-                           errorCode,
-                           errorMessage);
+        delete runtimeFont;
+        return nullptr;
     }
 
-    return true;
+    return runtimeFont;
 }
 
 void MGF_RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont)
@@ -1023,10 +993,8 @@ mgbool MGF_BakeSpriteFont(mgbyte* data,
     glyphCount = 0;
     lineSpacing = 0;
 
-    MGF_RuntimeFont* runtimeFont = nullptr;
-    mgint createErrorCode = MGF_RuntimeFontErrorCode_None;
-    const char* createErrorMessage = nullptr;
-    if (!MGF_RuntimeFont_Create(data, dataBytes, runtimeFont, createErrorCode, createErrorMessage))
+    MGF_RuntimeFont* runtimeFont = MGF_RuntimeFont_Create(data, dataBytes);
+    if (runtimeFont == nullptr)
         return false;
 
     MGF_PageUpdate* runtimePageUpdates = nullptr;

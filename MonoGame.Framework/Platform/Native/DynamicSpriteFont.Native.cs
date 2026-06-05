@@ -150,15 +150,10 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         try
         {
             fontDataHandle = GCHandle.Alloc(fontData, GCHandleType.Pinned);
-            if (!MGF.RuntimeFont_Create((byte*)fontDataHandle.AddrOfPinnedObject(),
-                                       fontData.Length,
-                                       out MGF_RuntimeFont* runtimeFont,
-                                       out int errorCode,
-                                       out nint errorMessage))
+            MGF_RuntimeFont* runtimeFont = MGF.RuntimeFont_Create((byte*)fontDataHandle.AddrOfPinnedObject(), fontData.Length);
+            if (runtimeFont == null)
             {
-                ThrowRuntimeFontCreateException(errorCode,
-                                               errorMessage,
-                                               "Failed to create a runtime DynamicSpriteFont from the supplied font data.");
+                throw new InvalidOperationException("Failed to create a runtime DynamicSpriteFont from the supplied font data.");
             }
 
             return new FontHandle(runtimeFont);
@@ -446,20 +441,6 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
     {
         ThrowRuntimeFontException(fontHandle.Handle,
                                   "Failed to update a runtime DynamicSpriteFont from the supplied font data.");
-    }
-
-    private static void ThrowRuntimeFontCreateException(int errorCodeValue, nint errorMessage, string fallbackMessage)
-    {
-        MGF_RuntimeFontErrorCode errorCode = (MGF_RuntimeFontErrorCode)errorCodeValue;
-        string message = Marshal.PtrToStringAnsi(errorMessage)
-            ?? fallbackMessage;
-
-        if (errorCode == MGF_RuntimeFontErrorCode.OutOfMemory)
-        {
-            throw new OutOfMemoryException(message);
-        }
-
-        throw new InvalidOperationException(message);
     }
 
     private static unsafe void ThrowRuntimeFontException(MGF_RuntimeFont* runtimeFont, string fallbackMessage)
