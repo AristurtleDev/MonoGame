@@ -63,6 +63,42 @@ struct MGF_PageUpdate
     mgbool AtlasRebuilt;
 };
 
+struct MGF_BakeSpriteFontRequest
+{
+    const mgbyte* Data;
+    mgint DataBytes;
+    mgint Size;
+    const MGF_CharacterRegion* CharacterRegions;
+    mgint CharacterRegionCount;
+};
+
+struct MGF_BakeSpriteFontResult
+{
+    mgbyte* AtlasRgba;
+    mgint AtlasWidth;
+    mgint AtlasHeight;
+    MGF_Glyph* Glyphs;
+    mgint GlyphCount;
+    mgint LineSpacing;
+};
+
+struct MGF_RuntimeFontEnsureGlyphsRequest
+{
+    MGF_RuntimeFont* RuntimeFont;
+    mgint Size;
+    const MGF_CharacterRegion* CharacterRegions;
+    mgint CharacterRegionCount;
+};
+
+struct MGF_RuntimeFontEnsureGlyphsResult
+{
+    MGF_PageUpdate* PageUpdates;
+    mgint PageUpdateCount;
+    MGF_Glyph* Glyphs;
+    mgint GlyphCount;
+    mgint LineSpacing;
+};
+
 /**
  * Bakes a traditional SpriteFont atlas in one call
  *
@@ -71,33 +107,13 @@ struct MGF_PageUpdate
  * caller and must be released with MGF_Free.  The function fails if the requested glyph set would
  * require more than one atlas page.
  *
- * @param data Pointer to the font file bytes.
- * @param dataBytes Number of bytes available at `data`.
- * @param size Requested glyph height in pixels. Must be greater than zero.
- * @param characterRegions Inclusive character ranges to bake.
- * @param characterRegionCount Number of entries in `characterRegions`.
- * @param atlasRgba Receives a tightly packed RGBA atlas buffer on success.
- * @param atlasWidth Receives the atlas width in pixels.
- * @param atlasHeight Receives the atlas height in pixels.
- * @param glyphs Receives the baked glyph metrics on success.
- * @param glyphCount Receives the number of entries written to `glyphs`.
- * @param lineSpacing Receives the font line spacing in pixels for `size`.
+ * @param request Bake inputs. Must not be `nullptr`
+ * @param result Receives the baked atlas and glyph outputs on success.  Must not be `nullptr`.
  * @return `MGF_ResultCode_Success` when the font data was valid and the baked glyph set fit
  * within one atlas page.
  */
-MG_EXPORT MGF_ResultCode MGF_BakeSpriteFont(
-    mgbyte* data,
-    mgint dataBytes,
-    mgint size,
-    MGF_CharacterRegion* characterRegions,
-    mgint characterRegionCount,
-    mgbyte*& atlasRgba,
-    mgint& atlasWidth,
-    mgint& atlasHeight,
-    MGF_Glyph*& glyphs,
-    mgint& glyphCount,
-    mgint& lineSpacing
-);
+MG_EXPORT MGF_ResultCode MGF_BakeSpriteFont(const MGF_BakeSpriteFontRequest* request,
+                                            MGF_BakeSpriteFontResult* result);
 
 /**
  * Creates a runtime font handle for incremental glyph baking.
@@ -111,16 +127,12 @@ MG_EXPORT MGF_ResultCode MGF_BakeSpriteFont(
  * @return `MGF_ResultCode_Success` on success; otherwise returns  non-success result and leaves
  * `runtimeFont` as `nullptr`.
  */
-MG_EXPORT MGF_ResultCode MGF_RuntimeFont_Create(
-    mgbyte* data,
-    mgint dataBytes,
-    MGF_RuntimeFont*& runtimeFont
-);
+MG_EXPORT MGF_ResultCode MGF_RuntimeFont_Create(mgbyte* data,
+                                                mgint dataBytes,
+                                                MGF_RuntimeFont*& runtimeFont);
 
 // Releases a handle created by MGF_RuntimeFont_Create. Passing `nullptr` is allowed.
-MG_EXPORT void MGF_RuntimeFont_Destroy(
-    MGF_RuntimeFont* runtimeFont
-);
+MG_EXPORT void MGF_RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont);
 
 /**
  * Ensures that the requested characters exist in the runtime atlas for a given size.
@@ -130,28 +142,13 @@ MG_EXPORT void MGF_RuntimeFont_Destroy(
  * baked glyph set currently owned by `runtimeFont`.  Those pointers remain valid until the next
  * call that mutates `runtimeFont` or until MGF_RuntimeFont_Destroy is called.
  *
- * @param runtimeFont Runtime font handle created by MGF_RuntimeFont_Create.
- * @param size Requested glyph height in pixels. Must be greater than zero.
- * @param characterRegions Inclusive character ranges to bake.
- * @param characterRegionCount Number of entries in `characterRegions`.
- * @param pageUpdates Receives the touched atlas pages for this call.
- * @param glyphs Receives the complete glyph table currently cached by `runtimeFont`.
- * @param glyphCount Receives the number of entries written to `glyphs`.
- * @param lineSpacing Receives the font line spacing in pixels for `size`.
+ * @param request Glyph request inputs.  Must not be `nullptr`.
+ * @param result Receives the touched atlas pages and glyph outputs. Must not be `nullptr`.
  * @return `MGF_Result_Code_Success` when the glyph request completed successfully;
  * otherwise returns a non-success result and leaves all output data clear.
  */
-MG_EXPORT MGF_ResultCode MGF_RuntimeFont_EnsureGlyphs(
-    MGF_RuntimeFont* runtimeFont,
-    mgint size,
-    MGF_CharacterRegion* characterRegions,
-    mgint characterRegionCount,
-    MGF_PageUpdate*& pageUpdates,
-    mgint& pageUpdateCount,
-    MGF_Glyph*& glyphs,
-    mgint& glyphCount,
-    mgint& lineSpacing
-);
+MG_EXPORT MGF_ResultCode MGF_RuntimeFont_EnsureGlyphs(const MGF_RuntimeFontEnsureGlyphsRequest* request,
+                                                      MGF_RuntimeFontEnsureGlyphsResult* result);
 
 // Releases buffers returned by MGF_BakeSpriteFont.  Passing `nullptr` is allowed.
 MG_EXPORT void MGF_Free(void* resource);

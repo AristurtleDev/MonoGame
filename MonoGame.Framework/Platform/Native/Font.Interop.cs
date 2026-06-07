@@ -64,6 +64,46 @@ internal unsafe struct MGF_PageUpdate
     public bool AtlasRebuilt;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct MGF_BakeSpriteFontRequest
+{
+    public byte* Data;
+    public int DataBytes;
+    public int Size;
+    public MGF_CharacterRegion* CharacterRegion;
+    public int characterRegionCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct MGF_BakeSpriteFontResult
+{
+    public byte* AtlasRgba;
+    public int AtlasWidth;
+    public int AtlasHeight;
+    public MGF_Glyph* Glyphs;
+    public int GlyphCount;
+    public int LineSpacing;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct MGF_RuntimeFontEnsureGlyphsRequest
+{
+    public MGF_RuntimeFont* RuntimeFont;
+    public int Size;
+    public MGF_CharacterRegion* CharacterRegions;
+    public int CharacterRegionCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct MGF_RuntimeFontEnsureGlyphsResult
+{
+    public MGF_PageUpdate* PageUpdates;
+    public int PageUpdateCount;
+    public MGF_Glyph* Glyphs;
+    public int GlyphCount;
+    public int LineSpacing;
+}
+
 internal static unsafe class MGF
 {
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = "MGF_RuntimeFont_Create", ExactSpelling = true)]
@@ -73,28 +113,12 @@ internal static unsafe class MGF
     public static extern void RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont);
 
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = "MGF_RuntimeFont_EnsureGlyphs", ExactSpelling = true)]
-    public static extern MGF_ResultCode RuntimeFont_EnsureGlyphs(MGF_RuntimeFont* runtimeFont,
-                                                                 int size,
-                                                                 MGF_CharacterRegion* characterRegions,
-                                                                 int characterRegionCount,
-                                                                 out MGF_PageUpdate* pageUpdates,
-                                                                 out int pageUpdateCount,
-                                                                 out MGF_Glyph* glyphs,
-                                                                 out int glyphCount,
-                                                                 out int lineSpacing);
+    public static extern MGF_ResultCode RuntimeFont_EnsureGlyphs(MGF_RuntimeFontEnsureGlyphsRequest* request,
+                                                                 MGF_RuntimeFontEnsureGlyphsResult* result);
 
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = "MGF_BakeSpriteFont", ExactSpelling = true)]
-    public static extern MGF_ResultCode BakeSpriteFont(byte* data,
-                                                       int dataBytes,
-                                                       int size,
-                                                       MGF_CharacterRegion* characterRegions,
-                                                       int characterRegionCount,
-                                                       out byte* atlasRgba,
-                                                       out int atlasWidth,
-                                                       out int atlasHeight,
-                                                       out MGF_Glyph* glyphs,
-                                                       out int glyphCount,
-                                                       out int lineSpacing);
+    public static extern MGF_ResultCode BakeSpriteFont(MGF_BakeSpriteFontRequest* request,
+                                                       MGF_BakeSpriteFontResult* result);
 
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = "MGF_Free", ExactSpelling = true)]
     public static extern void Free(void* resource);

@@ -206,16 +206,21 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
             regionHandle = GCHandle.Alloc(nativeRegions, GCHandleType.Pinned);
 
-            MGF_ResultCode resultCode = MGF.RuntimeFont_EnsureGlyphs(fontHandle.Handle,
-                                                                     size,
-                                                                     (MGF_CharacterRegion*)regionHandle.AddrOfPinnedObject(),
-                                                                     nativeRegions.Length,
-                                                                     out pageUpdates,
-                                                                     out pageUpdateCount,
-                                                                     out glyphs,
-                                                                     out glyphCount,
-                                                                     out lineSpacing);
+            MGF_RuntimeFontEnsureGlyphsRequest request = new MGF_RuntimeFontEnsureGlyphsRequest();
+            request.RuntimeFont = fontHandle.Handle;
+            request.Size = size;
+            request.CharacterRegions = (MGF_CharacterRegion*)regionHandle.AddrOfPinnedObject();
+            request.CharacterRegionCount = nativeRegions.Length;
 
+            MGF_RuntimeFontEnsureGlyphsResult result = default;
+            MGF_ResultCode resultCode = MGF.RuntimeFont_EnsureGlyphs(&request, &result);
+
+            pageUpdates = result.PageUpdates;
+            pageUpdateCount = result.PageUpdateCount;
+            glyphs = result.Glyphs;
+            glyphCount = result.GlyphCount;
+            lineSpacing = result.LineSpacing;
+            
             if (resultCode != MGF_ResultCode.Success)
             {
                 throw resultCode switch
