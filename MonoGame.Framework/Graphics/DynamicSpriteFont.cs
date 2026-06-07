@@ -582,7 +582,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
 
             if (Handle != null)
             {
-                MGF.Font_Destroy(Handle);
+                MGF.MGF_Font_Destroy(Handle);
             }
 
             _isDisposed = true;

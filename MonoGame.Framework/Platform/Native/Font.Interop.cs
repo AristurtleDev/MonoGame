@@ -106,19 +106,19 @@ internal unsafe struct MGF_FontEnsureGlyphsResult
 
 internal static unsafe class MGF
 {
-    [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(Font_Create), ExactSpelling = true)]
-    public static extern MGF_ResultCode Font_Create(byte* data, int dataBytes, out MGF_Font* font);
+    [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(MGF_Font_Create), ExactSpelling = true)]
+    public static extern MGF_ResultCode MGF_Font_Create(byte* data, int dataBytes, out MGF_Font* font);
 
-    [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(Font_Destroy), ExactSpelling = true)]
-    public static extern void Font_Destroy(MGF_Font* font);
+    [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(MGF_Font_Destroy), ExactSpelling = true)]
+    public static extern void MGF_Font_Destroy(MGF_Font* font);
 
-    [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(Font_EnsureGlyphs), ExactSpelling = true)]
-    public static extern MGF_ResultCode Font_EnsureGlyphs(MGF_FontEnsureGlyphsRequest* request,
-                                                          MGF_FontEnsureGlyphsResult* result);
+    [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(MGF_Font_EnsureGlyphs), ExactSpelling = true)]
+    public static extern MGF_ResultCode MGF_Font_EnsureGlyphs(MGF_FontEnsureGlyphsRequest* request,
+                                                              MGF_FontEnsureGlyphsResult* result);
 
-    [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(BakeSpriteFont), ExactSpelling = true)]
-    public static extern MGF_ResultCode BakeSpriteFont(MGF_BakeSpriteFontRequest* request,
-                                                       MGF_BakeSpriteFontResult* result);
+    [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(MGF_BakeSpriteFont), ExactSpelling = true)]
+    public static extern MGF_ResultCode MGF_BakeSpriteFont(MGF_BakeSpriteFontRequest* request,
+                                                           MGF_BakeSpriteFontResult* result);
 
     [DllImport(MGP.MonoGameNativeDLL, EntryPoint = nameof(MGF_Free), ExactSpelling = true)]
     public static extern void MGF_Free(void* resource);

@@ -150,7 +150,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
         try
         {
             fontDataHandle = GCHandle.Alloc(fontData, GCHandleType.Pinned);
-            MGF_ResultCode resultCode = MGF.Font_Create((byte*)fontDataHandle.AddrOfPinnedObject(),
+            MGF_ResultCode resultCode = MGF.MGF_Font_Create((byte*)fontDataHandle.AddrOfPinnedObject(),
                                                         fontData.Length,
                                                         out MGF_Font* font);
 
@@ -213,7 +213,7 @@ public sealed partial class DynamicSpriteFont : GraphicsResource
             request.CharacterRegionCount = nativeRegions.Length;
 
             MGF_FontEnsureGlyphsResult result = default;
-            MGF_ResultCode resultCode = MGF.Font_EnsureGlyphs(&request, &result);
+            MGF_ResultCode resultCode = MGF.MGF_Font_EnsureGlyphs(&request, &result);
 
             pageUpdates = result.PageUpdates;
             pageUpdateCount = result.PageUpdateCount;
