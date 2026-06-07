@@ -9,16 +9,23 @@
 // Opaque runtime font handle used by incremental glyph baking API.
 struct MGF_RuntimeFont;
 
-// Error codes reported by MGG_RuntimeFont_GetLastErrorCode after a runtime call fails.
-enum MGF_RuntimeFontErrorCode
+// Stable result codes returned by the explicit runtime font contract.
+enum MGF_ResultCode
 {
-    MGF_RuntimeFontErrorCode_None = 0,
-    MGF_RuntimeFontErrorCode_InvalidArgument = 1,
-    MGF_RuntimeFontErrorCode_OutOfMemory = 2,
-    MGF_RuntimeFontErrorCode_AtlasCapacityExceeded = 3,
-    MGF_RuntimeFontErrorCode_NoGlyphData = 4,
-    MGF_RuntimeFontErrorCode_Unknown = 5
+    MGF_ResultCode_Success = 0,
+    MGF_ResultCode_InvalidArgument = 1,
+    MGF_ResultCode_InvalidFontData = 2,
+    MGF_ResultCode_OutOfMemory = 3,
+    MGF_ResultCode_BackendInitializationFailed = 4,
+    MGF_ResultCode_FontSizeSetupFailed = 5,
+    MGF_ResultCode_GlyphLoadFailed = 6,
+    MGF_ResultCode_GlyphRenderFailed = 7,
+    MGF_ResultCode_UnsupportedGlyphBitmapFormat = 8,
+    MGF_ResultCode_AtlasCapacityExceeded = 9,
+    MGF_ResultCode_NoGlyphData = 10,
+    MGF_ResultCode_InternalError = 11
 };
+
 
 // Inclusive Unicode character range.
 struct MGF_CharacterRegion
@@ -75,9 +82,10 @@ struct MGF_PageUpdate
  * @param glyphs Receives the baked glyph metrics on success.
  * @param glyphCount Receives the number of entries written to `glyphs`.
  * @param lineSpacing Receives the font line spacing in pixels for `size`.
- * @return `true` when the font data was valid and the baked glyph set fit within one atlas page.
+ * @return `MGF_ResultCode_Success` when the font data was valid and the baked glyph set fit
+ * within one atlas page.
  */
-MG_EXPORT mgbool MGF_BakeSpriteFont(
+MG_EXPORT MGF_ResultCode MGF_BakeSpriteFont(
     mgbyte* data,
     mgint dataBytes,
     mgint size,
@@ -99,12 +107,14 @@ MG_EXPORT mgbool MGF_BakeSpriteFont(
  *
  * @param data Pointer to the font file bytes.
  * @param dataBytes Number of byte available in `data`.
- * @return A runtime font handle, or `nullptr` when the arguments are invalid or the font cannot
- * be parsed.
+ * @param runtimeFont Receives a fully initialized runtime font handle on success.
+ * @return `MGF_ResultCode_Success` on success; otherwise returns  non-success result and leaves
+ * `runtimeFont` as `nullptr`.
  */
-MG_EXPORT MGF_RuntimeFont* MGF_RuntimeFont_Create(
+MG_EXPORT MGF_ResultCode MGF_RuntimeFont_Create(
     mgbyte* data,
-    mgint dataBytes
+    mgint dataBytes,
+    MGF_RuntimeFont*& runtimeFont
 );
 
 // Releases a handle created by MGF_RuntimeFont_Create. Passing `nullptr` is allowed.
@@ -128,9 +138,10 @@ MG_EXPORT void MGF_RuntimeFont_Destroy(
  * @param glyphs Receives the complete glyph table currently cached by `runtimeFont`.
  * @param glyphCount Receives the number of entries written to `glyphs`.
  * @param lineSpacing Receives the font line spacing in pixels for `size`.
- * @return `true` when the glyph request completed successfully.
+ * @return `MGF_Result_Code_Success` when the glyph request completed successfully;
+ * otherwise returns a non-success result and leaves all output data clear.
  */
-MG_EXPORT mgbool MGF_RuntimeFont_EnsureGlyphs(
+MG_EXPORT MGF_ResultCode MGF_RuntimeFont_EnsureGlyphs(
     MGF_RuntimeFont* runtimeFont,
     mgint size,
     MGF_CharacterRegion* characterRegions,
@@ -141,12 +152,6 @@ MG_EXPORT mgbool MGF_RuntimeFont_EnsureGlyphs(
     mgint& glyphCount,
     mgint& lineSpacing
 );
-
-// Returns the last error code recorded on `runtimeFont`, or InvalidArgument for a null handle.
-MG_EXPORT mgint MGF_RuntimeFont_GetLastErrorCode(MGF_RuntimeFont* runtimeFont);
-
-// Returns the last error message recorded on `runtimeFont`, or a static message for a null handle.
-MG_EXPORT const char* MGF_RuntimeFont_GetLastErrorMessage(MGF_RuntimeFont* runtimeFont);
 
 // Releases buffers returned by MGF_BakeSpriteFont.  Passing `nullptr` is allowed.
 MG_EXPORT void MGF_Free(void* resource);

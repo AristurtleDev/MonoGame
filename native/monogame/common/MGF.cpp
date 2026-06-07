@@ -6,12 +6,12 @@
 #include "mg_common.h"
 
 #include <algorithm>
-#include <exception>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <exception>
 #include <iterator>
 #include <new>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -22,6 +22,15 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
+
+#if defined(_WIN32) && defined(_DEBUG)
+// Prevent Windows headers from defining min/max macros 
+// that break std::min/std::max in debug builds.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#endif
 
 struct GlyphBuildInfo
 {
@@ -94,8 +103,6 @@ struct MGF_RuntimeFont
     std::vector<MGF_Glyph> GlyphResults;
     std::unordered_map<GlyphKey, RuntimeGlyphLocation, GlyphKeyHash> GlyphLookup;
     std::unordered_map<mgint, RuntimeSizeInfo> SizeLookup;
-    mgint LastErrorCode;
-    std::string LastErrorMessage;
 };
 
 namespace
@@ -104,18 +111,68 @@ namespace
     constexpr mgint MinimumAtlasSize = 256;
     constexpr mgint MaximumAtlasSize = 4096;
 
-    void clear_error(MGF_RuntimeFont& runtimeFont)
+    const char* mgf_result_code_name(MGF_ResultCode resultCode)
     {
-        runtimeFont.LastErrorCode = MGF_RuntimeFontErrorCode_None;
-        runtimeFont.LastErrorMessage.clear();
+        switch (resultCode)
+        {
+            case MGF_ResultCode_Success:                        return "Success";
+            case MGF_ResultCode_InvalidArgument:                return "InvalidArgument";
+            case MGF_ResultCode_InvalidFontData:                return "InvalidFontData";
+            case MGF_ResultCode_OutOfMemory:                    return "OutOfMemory";
+            case MGF_ResultCode_BackendInitializationFailed:    return "BackendInitializationFailed";
+            case MGF_ResultCode_FontSizeSetupFailed:            return "FontSizeSetupFailed";
+            case MGF_ResultCode_GlyphLoadFailed:                return "GlyphLoadFailed";
+            case MGF_ResultCode_GlyphRenderFailed:              return "GlyphRenderFailed";
+            case MGF_ResultCode_UnsupportedGlyphBitmapFormat:   return "UnsupportedGlyphBitmapFormat";
+            case MGF_ResultCode_AtlasCapacityExceeded:          return "AtlasCapacityExceeded";
+            case MGF_ResultCode_NoGlyphData:                    return "NoGlyphData";
+            case MGF_ResultCode_InternalError:                  return "InternalError";
+            default:                                            return "Unknown";
+        }
     }
 
-    mgbool fail(MGF_RuntimeFont& runtimeFont, mgint errorCode, const char* message)
+#if defined(_DEBUG)
+    void mgf_debug_write(const char* message)
     {
-        runtimeFont.LastErrorCode = errorCode;
-        runtimeFont.LastErrorMessage = message;
-        return false;
+        if (message == nullptr || message[0] == '\0')
+            return;
+
+#if defined(_WIN32)
+        OutputDebugStringA(message);
+#else
+        fputs(message, stderr);
+        fflush(stderr);
+#endif
     }
+
+    void mgf_debug_log_result(const char* context, MGF_ResultCode resultCode, const char* message)
+    {
+        char buffer[512] = {};
+        snprintf(buffer,
+                 sizeof(buffer),
+                 "[MGF] %s: result=%s message=\"%s\"\n",
+                 context != nullptr ? context : "<unknown>",
+                 mgf_result_code_name(resultCode),
+                 message != nullptr ? message : "");
+
+        mgf_debug_write(buffer);
+    }
+
+    void mgf_debug_log_message(const char* context, const char* message)
+    {
+        char buffer[512] = {};
+        snprintf(buffer,
+                 sizeof(buffer),
+                 "[MGF] %s: %s\n",
+                 context != nullptr ? context : "<unknown>",
+                 message != nullptr ? message : "");
+
+        mgf_debug_write(buffer);
+    }
+#else
+    void mgf_debug_log_result(const char*, MGF_ResultCode, const char*) {}
+    void mgf_debug_log_message(const char*, const char*) {}
+#endif
 
     mgint ceil_pixels_from_26dot6(FT_Pos value)
     {
@@ -127,18 +184,18 @@ namespace
         return static_cast<mgfloat>(value) / 64.0f;
     }
 
-    void copy_glyph_bitmap(const FT_Bitmap& bitmap, std::vector<mgbyte>& pixels)
+    MGF_ResultCode copy_glyph_bitmap(const FT_Bitmap& bitmap, std::vector<mgbyte>& pixels)
     {
         const mgint width = static_cast<mgint>(bitmap.width);
         const mgint height = static_cast<mgint>(bitmap.rows);
         if (width <= 0 || height <= 0)
         {
             pixels.clear();
-            return;
+            return MGF_ResultCode_Success;
         }
 
         if (bitmap.buffer == nullptr)
-            throw std::runtime_error("DynamicSpriteFont glyph rendering returned a null FreeType bitmap buffer.");
+            return MGF_ResultCode_InternalError;
 
         pixels.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
 
@@ -166,8 +223,10 @@ namespace
                 continue;
             }
 
-            throw std::runtime_error("DynamicSpriteFont glyph rendering produced an unsupported FreeType bitmap format.");
+            return MGF_ResultCode_UnsupportedGlyphBitmapFormat;
         }
+
+        return MGF_ResultCode_Success;
     }
 
     mgint next_power_of_two(mgint value)
@@ -199,27 +258,27 @@ namespace
         return characters;
     }
 
-    mgbool ensure_size_info(MGF_RuntimeFont& runtimeFont, mgint size, RuntimeSizeInfo*& sizeInfo)
+    MGF_ResultCode ensure_size_info(MGF_RuntimeFont& runtimeFont, mgint size, RuntimeSizeInfo*& sizeInfo)
     {
         sizeInfo = nullptr;
 
         if (runtimeFont.FreeTypeFace == nullptr)
-            return false;
+            return MGF_ResultCode_InternalError;
 
         if (FT_Set_Pixel_Sizes(runtimeFont.FreeTypeFace, 0, static_cast<FT_UInt>(size)) != FT_Err_Ok)
-            return false;
+            return MGF_ResultCode_FontSizeSetupFailed;
 
         auto sizeIterator = runtimeFont.SizeLookup.find(size);
         if (sizeIterator != runtimeFont.SizeLookup.end())
         {
             sizeInfo = &sizeIterator->second;
-            return true;
+            return MGF_ResultCode_Success;
         }
 
         RuntimeSizeInfo newSizeInfo = {};
         newSizeInfo.Size = size;
         if (runtimeFont.FreeTypeFace->size == nullptr)
-            return false;
+            return MGF_ResultCode_InternalError;
 
         const FT_Size_Metrics& sizeMetrics = runtimeFont.FreeTypeFace->size->metrics;
         newSizeInfo.AscentPixels = ceil_pixels_from_26dot6(sizeMetrics.ascender);
@@ -229,32 +288,35 @@ namespace
 
         const auto result = runtimeFont.SizeLookup.emplace(size, newSizeInfo);
         sizeInfo = &result.first->second;
-        return true;
+        return MGF_ResultCode_Success;
     }
 
-    mgbool build_glyph(FT_Face freeTypeFace,
-                       const RuntimeSizeInfo& sizeInfo,
-                       mgchar character,
-                       GlyphBuildInfo& glyph)
+    MGF_ResultCode build_glyph(FT_Face freeTypeFace,
+                               const RuntimeSizeInfo& sizeInfo,
+                               mgchar character,
+                               GlyphBuildInfo& glyph,
+                               mgbool& glyphBuilt)
     {
+        glyphBuilt = false;
+
         if (freeTypeFace == nullptr)
-            return false;
+            return MGF_ResultCode_InternalError;
 
         const FT_UInt glyphIndex = FT_Get_Char_Index(freeTypeFace, static_cast<FT_ULong>(character));
         if (glyphIndex == 0)
-            return false;
+            return MGF_ResultCode_Success;
 
         if (FT_Load_Glyph(freeTypeFace, glyphIndex, FT_LOAD_DEFAULT) != FT_Err_Ok)
-            throw std::runtime_error("DynamicSpriteFont glyph metric extraction failed to load a FreeType glyph.");
+            return MGF_ResultCode_GlyphLoadFailed;
 
         FT_GlyphSlot glyphSlot = freeTypeFace->glyph;
         if (glyphSlot == nullptr)
-            throw std::runtime_error("DynamicSpriteFont glyph metric extraction did not receive a FreeType glyph slot.");
+            return MGF_ResultCode_InternalError;
 
         if (glyphSlot->format != FT_GLYPH_FORMAT_BITMAP &&
             FT_Render_Glyph(glyphSlot, FT_RENDER_MODE_NORMAL) != FT_Err_Ok)
         {
-            throw std::runtime_error("DynamicSpriteFont glyph rendering failed to rasterize a FreeType glyph.");
+            return MGF_ResultCode_GlyphRenderFailed;
         }
 
         const mgint width = static_cast<mgint>(glyphSlot->bitmap.width);
@@ -273,17 +335,22 @@ namespace
         glyph.LeftSideBearing = leftSideBearing;
         glyph.WidthValue = widthValue;
         glyph.RightSideBearing = advancePixels - (leftSideBearing + widthValue);
-        copy_glyph_bitmap(glyphSlot->bitmap, glyph.Pixels);
 
-        return true;
+        const MGF_ResultCode copyResult = copy_glyph_bitmap(glyphSlot->bitmap, glyph.Pixels);
+        if (copyResult != MGF_ResultCode_Success)
+            return copyResult;
+
+        glyphBuilt = true;
+        return MGF_ResultCode_Success;
     }
 
-    std::vector<GlyphBuildInfo> build_glyphs(FT_Face freeTypeFace,
-                                             const RuntimeSizeInfo& sizeInfo,
-                                             const std::vector<mgchar>& characters,
-                                             const std::unordered_map<GlyphKey, RuntimeGlyphLocation, GlyphKeyHash>& glyphLookup)
+    MGF_ResultCode build_glyphs(FT_Face freeTypeFace,
+                                const RuntimeSizeInfo& sizeInfo,
+                                const std::vector<mgchar>& characters,
+                                const std::unordered_map<GlyphKey, RuntimeGlyphLocation, GlyphKeyHash>& glyphLookup,
+                                std::vector<GlyphBuildInfo>& glyphs)
     {
-        std::vector<GlyphBuildInfo> glyphs;
+        glyphs.clear();
         glyphs.reserve(characters.size());
 
         for (mgchar character : characters)
@@ -292,11 +359,17 @@ namespace
                 continue;
 
             GlyphBuildInfo glyph = {};
-            if (build_glyph(freeTypeFace, sizeInfo, character, glyph))
+            mgbool glyphBuilt = false;
+            const MGF_ResultCode buildResult = build_glyph(freeTypeFace, sizeInfo, character, glyph, glyphBuilt);
+
+            if (buildResult != MGF_ResultCode_Success)
+                return buildResult;
+
+            if (glyphBuilt)
                 glyphs.push_back(std::move(glyph));
         }
 
-        return glyphs;
+        return MGF_ResultCode_Success;
     }
 
     mgint estimate_initial_atlas_size(const std::vector<GlyphBuildInfo>& glyphs)
@@ -631,15 +704,15 @@ namespace
         }
 
         std::sort(glyphs.begin(), glyphs.end(), [](const GlyphBuildInfo* left, const GlyphBuildInfo* right)
-        {
-            if (left->Size != right->Size)
-                return left->Size < right->Size;
+                  {
+                      if (left->Size != right->Size)
+                          return left->Size < right->Size;
 
-            if (left->Character != right->Character)
-                return left->Character < right->Character;
+                      if (left->Character != right->Character)
+                          return left->Character < right->Character;
 
-            return left->PageIndex < right->PageIndex;
-        });
+                      return left->PageIndex < right->PageIndex;
+                  });
 
         rebuild_lookup(runtimeFont);
 
@@ -705,60 +778,54 @@ namespace
         }
     }
 
-    mgbool ensure_glyphs(MGF_RuntimeFont& runtimeFont,
-                         mgint size,
-                         MGF_CharacterRegion* characterRegions,
-                         mgint characterRegionCount,
-                         MGF_PageUpdate*& pageUpdates,
-                         mgint& pageUpdateCount,
-                         MGF_Glyph*& glyphs,
-                         mgint& glyphCount,
-                         mgint& lineSpacing)
+    MGF_ResultCode ensure_glyphs(MGF_RuntimeFont& runtimeFont,
+                                 mgint size,
+                                 MGF_CharacterRegion* characterRegions,
+                                 mgint characterRegionCount,
+                                 MGF_PageUpdate*& pageUpdates,
+                                 mgint& pageUpdateCount,
+                                 MGF_Glyph*& glyphs,
+                                 mgint& glyphCount,
+                                 mgint& lineSpacing)
     {
         try
         {
-            clear_error(runtimeFont);
             pageUpdates = nullptr;
             pageUpdateCount = 0;
             glyphs = nullptr;
-            glyphCount = static_cast<mgint>(runtimeFont.GlyphResults.size());
+            glyphCount = 0;
             lineSpacing = 0;
 
             if (size <= 0 || characterRegions == nullptr || characterRegionCount <= 0)
-            {
-                return fail(runtimeFont,
-                            MGF_RuntimeFontErrorCode_InvalidArgument,
-                            "DynamicSpriteFont glyph update received invalid native arguments.");
-            }
+                return MGF_ResultCode_InvalidArgument;
+
 
             RuntimeSizeInfo* sizeInfo = nullptr;
-            if (!ensure_size_info(runtimeFont, size, sizeInfo))
-            {
-                return fail(runtimeFont,
-                            MGF_RuntimeFontErrorCode_Unknown,
-                            "DynamicSpriteFont glyph update failed to select a FreeType pixel size for the requested rasterized font size.");
-            }
+            const MGF_ResultCode sizeInfoResult = ensure_size_info(runtimeFont, size, sizeInfo);
+            if (sizeInfoResult != MGF_ResultCode_Success)
+                return sizeInfoResult;
 
             lineSpacing = sizeInfo->LineSpacing;
 
             const auto characters = collect_characters(characterRegions, characterRegionCount);
             if (characters.empty())
-            {
-                return fail(runtimeFont,
-                            MGF_RuntimeFontErrorCode_NoGlyphData,
-                            "DynamicSpriteFont glyph update did not receive any characters to bake.");
-            }
+                return MGF_ResultCode_NoGlyphData;
 
-            auto newGlyphs = build_glyphs(runtimeFont.FreeTypeFace,
-                                          *sizeInfo,
-                                          characters,
-                                          runtimeFont.GlyphLookup);
+            std::vector<GlyphBuildInfo> newGlyphs;
+            const MGF_ResultCode buildResult = build_glyphs(runtimeFont.FreeTypeFace,
+                                                            *sizeInfo,
+                                                            characters,
+                                                            runtimeFont.GlyphLookup,
+                                                            newGlyphs);
+
+            if (buildResult != MGF_ResultCode_Success)
+                return buildResult;
 
             if (newGlyphs.empty())
             {
                 glyphs = runtimeFont.GlyphResults.empty() ? nullptr : runtimeFont.GlyphResults.data();
                 glyphCount = static_cast<mgint>(runtimeFont.GlyphResults.size());
-                return true;
+                return MGF_ResultCode_Success;
             }
 
             RuntimeAtlasPage* updatedPage = nullptr;
@@ -826,9 +893,7 @@ namespace
                             continue;
                         }
 
-                        return fail(runtimeFont,
-                                    MGF_RuntimeFontErrorCode_AtlasCapacityExceeded,
-                                    "DynamicSpriteFont glyphs could not fit within the maximum atlas page size.");
+                        return MGF_ResultCode_AtlasCapacityExceeded;
                     }
 
                     updatedPage = writablePage;
@@ -850,9 +915,10 @@ namespace
 
             if (updatedPage == nullptr)
             {
-                return fail(runtimeFont,
-                            MGF_RuntimeFontErrorCode_Unknown,
-                            "DynamicSpriteFont glyph update completed without touching any atlas page.");
+                mgf_debug_log_result("ensure_glyphs",
+                                     MGF_ResultCode_InternalError,
+                                     "glyph generation completed without tracking an updated atlas page.");
+                return MGF_ResultCode_InternalError;
             }
 
             pageUpdates = runtimeFont.PageUpdates.empty() ? nullptr : runtimeFont.PageUpdates.data();
@@ -863,61 +929,137 @@ namespace
 
             if (pageUpdates == nullptr || pageUpdateCount <= 0 || glyphs == nullptr || glyphCount <= 0)
             {
-                return fail(runtimeFont,
-                            MGF_RuntimeFontErrorCode_NoGlyphData,
-                            "DynamicSpriteFont glyph update did not return any page or glyph results.");
+                mgf_debug_log_result("ensure_glyphs",
+                                     MGF_ResultCode_NoGlyphData,
+                                     "glyph generation completed but the final output snapshot was incomplete.");
+                return MGF_ResultCode_NoGlyphData;
             }
-
-            return true;
         }
         catch (const std::bad_alloc&)
         {
-            return fail(runtimeFont,
-                        MGF_RuntimeFontErrorCode_OutOfMemory,
-                        "DynamicSpriteFont glyph update ran out of native memory while growing atlas pages.");
-        }
-        catch (const std::exception& exception)
-        {
-            return fail(runtimeFont,
-                        MGF_RuntimeFontErrorCode_Unknown,
-                        exception.what());
+            mgf_debug_log_result("ensure_glyphs",
+                                 MGF_ResultCode_OutOfMemory,
+                                 "glyph generation ran out of memory.");
+            return MGF_ResultCode_OutOfMemory;
         }
         catch (...)
         {
-            return fail(runtimeFont,
-                        MGF_RuntimeFontErrorCode_Unknown,
-                        "DynamicSpriteFont glyph update failed for an unknown native reason.");
+            mgf_debug_log_result("ensure_glyphs",
+                                 MGF_ResultCode_InternalError,
+                                 "glyph generation caught a unknown exception.");
+            return MGF_ResultCode_InternalError;
         }
     }
 }
 
-MGF_RuntimeFont* MGF_RuntimeFont_Create(mgbyte* data, mgint dataBytes)
+MGF_ResultCode MGF_RuntimeFont_Create(mgbyte* data,
+                                      mgint dataBytes,
+                                      MGF_RuntimeFont*& runtimeFont)
 {
+    runtimeFont = nullptr;
+
     if (data == nullptr || dataBytes <= 0)
-        return nullptr;
-
-    auto runtimeFont = new MGF_RuntimeFont();
-    runtimeFont->FreeTypeLibrary = nullptr;
-    runtimeFont->FreeTypeFace = nullptr;
-    runtimeFont->FontData.assign(data, data + dataBytes);
-    if (FT_Init_FreeType(&runtimeFont->FreeTypeLibrary) != FT_Err_Ok)
     {
-        delete runtimeFont;
-        return nullptr;
+        mgf_debug_log_result("MGF_RuntimeFont_Create",
+                             MGF_ResultCode_InvalidArgument,
+                             "create was called with null font data or a non-positive data length");
+        return MGF_ResultCode_InvalidArgument;
     }
 
-    if (FT_New_Memory_Face(runtimeFont->FreeTypeLibrary,
-                           runtimeFont->FontData.data(),
-                           static_cast<FT_Long>(runtimeFont->FontData.size()),
-                           0,
-                           &runtimeFont->FreeTypeFace) != FT_Err_Ok)
-    {
-        FT_Done_FreeType(runtimeFont->FreeTypeLibrary);
-        delete runtimeFont;
-        return nullptr;
-    }
+    MGF_RuntimeFont* createdRuntimeFont = nullptr;
 
-    return runtimeFont;
+    try
+    {
+        createdRuntimeFont = new MGF_RuntimeFont();
+        createdRuntimeFont->FreeTypeLibrary = nullptr;
+        createdRuntimeFont->FreeTypeFace = nullptr;
+        createdRuntimeFont->FontData.assign(data, data + dataBytes);
+
+        const FT_Error initResult = FT_Init_FreeType(&createdRuntimeFont->FreeTypeLibrary);
+        if (initResult != FT_Err_Ok)
+        {
+            delete createdRuntimeFont;
+            createdRuntimeFont = nullptr;
+            mgf_debug_log_result("MGF_RuntimeFont_Create",
+                                 MGF_ResultCode_BackendInitializationFailed,
+                                 "the font system could not be initialized");
+            return MGF_ResultCode_BackendInitializationFailed;
+        }
+
+        const FT_Error faceResult = FT_New_Memory_Face(createdRuntimeFont->FreeTypeLibrary,
+                                                       createdRuntimeFont->FontData.data(),
+                                                       static_cast<FT_Long>(createdRuntimeFont->FontData.size()),
+                                                       0,
+                                                       &createdRuntimeFont->FreeTypeFace);
+
+        if (faceResult != FT_Err_Ok)
+        {
+            FT_Done_FreeType(createdRuntimeFont->FreeTypeLibrary);
+            delete createdRuntimeFont;
+            createdRuntimeFont = nullptr;
+            mgf_debug_log_result("MGF_RuntimeFont_Create",
+                                 MGF_ResultCode_InvalidFontData,
+                                 "the supplied font data could not be opened");
+            return MGF_ResultCode_InvalidFontData;
+        }
+
+        runtimeFont = createdRuntimeFont;
+        return MGF_ResultCode_Success;
+    }
+    catch (const std::bad_alloc&)
+    {
+        if (createdRuntimeFont != nullptr)
+        {
+            if (createdRuntimeFont->FreeTypeFace != nullptr)
+                FT_Done_Face(createdRuntimeFont->FreeTypeFace);
+
+            if (createdRuntimeFont->FreeTypeLibrary != nullptr)
+                FT_Done_FreeType(createdRuntimeFont->FreeTypeLibrary);
+
+            delete createdRuntimeFont;
+        }
+
+        mgf_debug_log_result("MGF_RuntimeFont_Create",
+                             MGF_ResultCode_OutOfMemory,
+                             "create ran out of memory while initializing the font face.");
+        return MGF_ResultCode_OutOfMemory;
+    }
+    catch (const std::exception&)
+    {
+        if (createdRuntimeFont != nullptr)
+        {
+            if (createdRuntimeFont->FreeTypeFace != nullptr)
+                FT_Done_Face(createdRuntimeFont->FreeTypeFace);
+
+            if (createdRuntimeFont->FreeTypeLibrary != nullptr)
+                FT_Done_FreeType(createdRuntimeFont->FreeTypeLibrary);
+
+            delete createdRuntimeFont;
+        }
+
+        mgf_debug_log_result("MGF_RuntimeFont_Create",
+                             MGF_ResultCode_InternalError,
+                             "create caught a standard exception.");
+        return MGF_ResultCode_InternalError;
+    }
+    catch (...)
+    {
+        if (createdRuntimeFont != nullptr)
+        {
+            if (createdRuntimeFont->FreeTypeFace != nullptr)
+                FT_Done_Face(createdRuntimeFont->FreeTypeFace);
+
+            if (createdRuntimeFont->FreeTypeLibrary != nullptr)
+                FT_Done_FreeType(createdRuntimeFont->FreeTypeLibrary);
+
+            delete createdRuntimeFont;
+        }
+
+        mgf_debug_log_result("MGF_RuntimeFont_Create",
+                             MGF_ResultCode_InternalError,
+                             "create caught an unknown exception.");
+        return MGF_ResultCode_InternalError;
+    }
 }
 
 void MGF_RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont)
@@ -934,57 +1076,60 @@ void MGF_RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont)
     delete runtimeFont;
 }
 
-mgbool MGF_RuntimeFont_EnsureGlyphs(MGF_RuntimeFont* runtimeFont,
-                                    mgint size,
-                                    MGF_CharacterRegion* characterRegions,
-                                    mgint characterRegionCount,
-                                    MGF_PageUpdate*& pageUpdates,
-                                    mgint& pageUpdateCount,
-                                    MGF_Glyph*& glyphs,
-                                    mgint& glyphCount,
-                                    mgint& lineSpacing)
+MGF_ResultCode MGF_RuntimeFont_EnsureGlyphs(MGF_RuntimeFont* runtimeFont,
+                                            mgint size,
+                                            MGF_CharacterRegion* characterRegions,
+                                            mgint characterRegionCount,
+                                            MGF_PageUpdate*& pageUpdates,
+                                            mgint& pageUpdateCount,
+                                            MGF_Glyph*& glyphs,
+                                            mgint& glyphCount,
+                                            mgint& lineSpacing)
 {
-    if (runtimeFont == nullptr)
-        return false;
+    pageUpdates = nullptr;
+    pageUpdateCount = 0;
+    glyphs = nullptr;
+    glyphCount = 0;
+    lineSpacing = 0;
 
-    return ensure_glyphs(*runtimeFont,
-                         size,
-                         characterRegions,
-                         characterRegionCount,
-                         pageUpdates,
-                         pageUpdateCount,
-                         glyphs,
-                         glyphCount,
-                         lineSpacing);
+    if (runtimeFont == nullptr)
+    {
+        mgf_debug_log_result("MGF_RuntimeFont_EnsureGlyphs",
+                             MGF_ResultCode_InvalidArgument,
+                             "ensure glyphs was called with a null runtime font handle.");
+        return MGF_ResultCode_InvalidArgument;
+    }
+
+    const MGF_ResultCode result = ensure_glyphs(*runtimeFont,
+                                                size,
+                                                characterRegions,
+                                                characterRegionCount,
+                                                pageUpdates,
+                                                pageUpdateCount,
+                                                glyphs,
+                                                glyphCount,
+                                                lineSpacing);
+    if (result != MGF_ResultCode_Success)
+    {
+        mgf_debug_log_result("MGF_RuntimeFont_EnsureGlyphs",
+                             result,
+                             "ensure glyphs returned da non-success result.");
+    }
+
+    return result;
 }
 
-mgint MGF_RuntimeFont_GetLastErrorCode(MGF_RuntimeFont* runtimeFont)
-{
-    if (runtimeFont == nullptr)
-        return MGF_RuntimeFontErrorCode_InvalidArgument;
-
-    return runtimeFont->LastErrorCode;
-}
-
-const char* MGF_RuntimeFont_GetLastErrorMessage(MGF_RuntimeFont* runtimeFont)
-{
-    if (runtimeFont == nullptr)
-        return "DynamicSpriteFont runtime font handle was null.";
-
-    return runtimeFont->LastErrorMessage.c_str();
-}
-
-mgbool MGF_BakeSpriteFont(mgbyte* data,
-                          mgint dataBytes,
-                          mgint size,
-                          MGF_CharacterRegion* characterRegions,
-                          mgint characterRegionCount,
-                          mgbyte*& atlasRgba,
-                          mgint& atlasWidth,
-                          mgint& atlasHeight,
-                          MGF_Glyph*& glyphs,
-                          mgint& glyphCount,
-                          mgint& lineSpacing)
+MGF_ResultCode MGF_BakeSpriteFont(mgbyte* data,
+                                  mgint dataBytes,
+                                  mgint size,
+                                  MGF_CharacterRegion* characterRegions,
+                                  mgint characterRegionCount,
+                                  mgbyte*& atlasRgba,
+                                  mgint& atlasWidth,
+                                  mgint& atlasHeight,
+                                  MGF_Glyph*& glyphs,
+                                  mgint& glyphCount,
+                                  mgint& lineSpacing)
 {
     atlasRgba = nullptr;
     atlasWidth = 0;
@@ -993,9 +1138,15 @@ mgbool MGF_BakeSpriteFont(mgbyte* data,
     glyphCount = 0;
     lineSpacing = 0;
 
-    MGF_RuntimeFont* runtimeFont = MGF_RuntimeFont_Create(data, dataBytes);
-    if (runtimeFont == nullptr)
-        return false;
+    MGF_RuntimeFont* runtimeFont = nullptr;
+    const MGF_ResultCode createResult = MGF_RuntimeFont_Create(data, dataBytes, runtimeFont);
+    if (createResult != MGF_ResultCode_Success)
+    {
+        mgf_debug_log_result("MGF_BakeSpriteFont",
+                             createResult,
+                             "bake failed while creating the font handle.");
+        return createResult;
+    }
 
     MGF_PageUpdate* runtimePageUpdates = nullptr;
     mgint runtimePageUpdateCount = 0;
@@ -1003,35 +1154,54 @@ mgbool MGF_BakeSpriteFont(mgbyte* data,
     mgint runtimeGlyphCount = 0;
     mgint runtimeLineSpacing = 0;
 
-    const auto result = MGF_RuntimeFont_EnsureGlyphs(runtimeFont,
-                                                     size,
-                                                     characterRegions,
-                                                     characterRegionCount,
-                                                     runtimePageUpdates,
-                                                     runtimePageUpdateCount,
-                                                     runtimeGlyphs,
-                                                     runtimeGlyphCount,
-                                                     runtimeLineSpacing);
+    const MGF_ResultCode updateResult = MGF_RuntimeFont_EnsureGlyphs(runtimeFont,
+                                                                     size,
+                                                                     characterRegions,
+                                                                     characterRegionCount,
+                                                                     runtimePageUpdates,
+                                                                     runtimePageUpdateCount,
+                                                                     runtimeGlyphs,
+                                                                     runtimeGlyphCount,
+                                                                     runtimeLineSpacing);
+
 
     // SpriteFont still expects a single atlas texture, so the one shot helper stays strict even
     // though the runtime font path can span multiple pages.
-    if (!result || runtimePageUpdates == nullptr || runtimePageUpdateCount != 1 || runtimeGlyphs == nullptr || runtimeGlyphCount <= 0)
+    if (updateResult != MGF_ResultCode_Success)
     {
         MGF_RuntimeFont_Destroy(runtimeFont);
-        return false;
+        mgf_debug_log_result("MGF_BakeSpriteFont",
+                             updateResult,
+                             "baked failed while ensuring glyphs.");
+        return updateResult;
+    }
+
+    if (runtimePageUpdates == nullptr || runtimePageUpdateCount != 1 || runtimeGlyphs == nullptr || runtimeGlyphCount <= 0)
+    {
+        MGF_RuntimeFont_Destroy(runtimeFont);
+        mgf_debug_log_result("MGF_BakeSpriteFont",
+                             MGF_ResultCode_NoGlyphData,
+                             "bake did not produce a single valid atlas page and glyph set.");
+        return MGF_ResultCode_NoGlyphData;
     }
 
     if (runtimeFont->Pages.size() != 1)
     {
         MGF_RuntimeFont_Destroy(runtimeFont);
-        return false;
+        mgf_debug_log_result("MGF_BakeSpriteFont",
+                             MGF_ResultCode_AtlasCapacityExceeded,
+                             "bake required more than one atlas page.");
+        return MGF_ResultCode_AtlasCapacityExceeded;
     }
 
     const MGF_PageUpdate& runtimePageUpdate = runtimePageUpdates[0];
     if (runtimePageUpdate.AtlasRgba == nullptr)
     {
         MGF_RuntimeFont_Destroy(runtimeFont);
-        return false;
+        mgf_debug_log_result("MGF_BakeSpriteFont",
+                             MGF_ResultCode_NoGlyphData,
+                             "bake completed without atlas pixel data.");
+        return MGF_ResultCode_NoGlyphData;
     }
 
     const auto atlasBytes = static_cast<size_t>(runtimePageUpdate.AtlasWidth) * static_cast<size_t>(runtimePageUpdate.AtlasHeight) * 4;
@@ -1042,7 +1212,10 @@ mgbool MGF_BakeSpriteFont(mgbyte* data,
         free(atlasBuffer);
         free(glyphBuffer);
         MGF_RuntimeFont_Destroy(runtimeFont);
-        return false;
+        mgf_debug_log_result("MGF_BakeSpriteFont",
+                             MGF_ResultCode_OutOfMemory,
+                             "bake ran out of memory while copying atlas or glyph results.");
+        return MGF_ResultCode_OutOfMemory;
     }
 
     memcpy(atlasBuffer, runtimePageUpdate.AtlasRgba, atlasBytes);
@@ -1056,7 +1229,7 @@ mgbool MGF_BakeSpriteFont(mgbyte* data,
     lineSpacing = runtimeLineSpacing;
 
     MGF_RuntimeFont_Destroy(runtimeFont);
-    return true;
+    return MGF_ResultCode_Success;
 }
 
 void MGF_Free(void* resource)
