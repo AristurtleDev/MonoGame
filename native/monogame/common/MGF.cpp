@@ -48,7 +48,7 @@ struct GlyphBuildInfo
     std::vector<mgbyte> Pixels;
 };
 
-struct RuntimeSizeInfo
+struct FontSizeInfo
 {
     mgint Size;
     mgint AscentPixels;
@@ -76,13 +76,13 @@ struct GlyphKeyHash
     }
 };
 
-struct RuntimeGlyphLocation
+struct GlyphLocation
 {
     size_t PageIndex;
     size_t GlyphIndex;
 };
 
-struct RuntimeAtlasPage
+struct FontAtlasPage
 {
     mgint Index;
     mgint AtlasWidth;
@@ -93,16 +93,16 @@ struct RuntimeAtlasPage
     std::vector<mgbyte> Atlas;
 };
 
-struct MGF_RuntimeFont
+struct MGF_Font
 {
     std::vector<mgbyte> FontData;
     FT_Library FreeTypeLibrary;
     FT_Face FreeTypeFace;
-    std::vector<RuntimeAtlasPage> Pages;
+    std::vector<FontAtlasPage> Pages;
     std::vector<MGF_PageUpdate> PageUpdates;
     std::vector<MGF_Glyph> GlyphResults;
-    std::unordered_map<GlyphKey, RuntimeGlyphLocation, GlyphKeyHash> GlyphLookup;
-    std::unordered_map<mgint, RuntimeSizeInfo> SizeLookup;
+    std::unordered_map<GlyphKey, GlyphLocation, GlyphKeyHash> GlyphLookup;
+    std::unordered_map<mgint, FontSizeInfo> SizeLookup;
 };
 
 namespace
@@ -258,7 +258,7 @@ namespace
         return characters;
     }
 
-    void clear_runtime_font_ensure_glyphs_result(MGF_RuntimeFontEnsureGlyphsResult& result)
+    void clear_font_ensure_glyphs_result(MGF_FontEnsureGlyphsResult& result)
     {
         result.PageUpdates = nullptr;
         result.PageUpdateCount = 0;
@@ -277,41 +277,41 @@ namespace
         result.LineSpacing = 0;
     }
 
-    MGF_ResultCode ensure_size_info(MGF_RuntimeFont& runtimeFont, mgint size, RuntimeSizeInfo*& sizeInfo)
+    MGF_ResultCode ensure_size_info(MGF_Font& font, mgint size, FontSizeInfo*& sizeInfo)
     {
         sizeInfo = nullptr;
 
-        if (runtimeFont.FreeTypeFace == nullptr)
+        if (font.FreeTypeFace == nullptr)
             return MGF_ResultCode_InternalError;
 
-        if (FT_Set_Pixel_Sizes(runtimeFont.FreeTypeFace, 0, static_cast<FT_UInt>(size)) != FT_Err_Ok)
+        if (FT_Set_Pixel_Sizes(font.FreeTypeFace, 0, static_cast<FT_UInt>(size)) != FT_Err_Ok)
             return MGF_ResultCode_FontSizeSetupFailed;
 
-        std::unordered_map<mgint, RuntimeSizeInfo>::iterator sizeIterator = runtimeFont.SizeLookup.find(size);
-        if (sizeIterator != runtimeFont.SizeLookup.end())
+        std::unordered_map<mgint, FontSizeInfo>::iterator sizeIterator = font.SizeLookup.find(size);
+        if (sizeIterator != font.SizeLookup.end())
         {
             sizeInfo = &sizeIterator->second;
             return MGF_ResultCode_Success;
         }
 
-        RuntimeSizeInfo newSizeInfo = {};
+        FontSizeInfo newSizeInfo = {};
         newSizeInfo.Size = size;
-        if (runtimeFont.FreeTypeFace->size == nullptr)
+        if (font.FreeTypeFace->size == nullptr)
             return MGF_ResultCode_InternalError;
 
-        const FT_Size_Metrics& sizeMetrics = runtimeFont.FreeTypeFace->size->metrics;
+        const FT_Size_Metrics& sizeMetrics = font.FreeTypeFace->size->metrics;
         newSizeInfo.AscentPixels = ceil_pixels_from_26dot6(sizeMetrics.ascender);
         newSizeInfo.LineSpacing = ceil_pixels_from_26dot6(sizeMetrics.height);
         if (newSizeInfo.LineSpacing <= 0)
             newSizeInfo.LineSpacing = size;
 
-        const std::pair<std::unordered_map<mgint, RuntimeSizeInfo>::iterator, bool> result = runtimeFont.SizeLookup.emplace(size, newSizeInfo);
+        const std::pair<std::unordered_map<mgint, FontSizeInfo>::iterator, bool> result = font.SizeLookup.emplace(size, newSizeInfo);
         sizeInfo = &result.first->second;
         return MGF_ResultCode_Success;
     }
 
     MGF_ResultCode build_glyph(FT_Face freeTypeFace,
-                               const RuntimeSizeInfo& sizeInfo,
+                               const FontSizeInfo& sizeInfo,
                                mgchar character,
                                GlyphBuildInfo& glyph,
                                mgbool& glyphBuilt)
@@ -364,9 +364,9 @@ namespace
     }
 
     MGF_ResultCode build_glyphs(FT_Face freeTypeFace,
-                                const RuntimeSizeInfo& sizeInfo,
+                                const FontSizeInfo& sizeInfo,
                                 const std::vector<mgchar>& characters,
-                                const std::unordered_map<GlyphKey, RuntimeGlyphLocation, GlyphKeyHash>& glyphLookup,
+                                const std::unordered_map<GlyphKey, GlyphLocation, GlyphKeyHash>& glyphLookup,
                                 std::vector<GlyphBuildInfo>& glyphs)
     {
         glyphs.clear();
@@ -448,29 +448,29 @@ namespace
         std::vector<GlyphBuildInfo> UnpackedGlyphs;
     };
 
-    struct RuntimePageUpdateInfo
+    struct PageUpdateInfo
     {
         size_t PageIndex;
         mgbool AtlasRebuilt;
     };
 
-    RuntimeAtlasPage* try_get_current_page(MGF_RuntimeFont& runtimeFont)
+    FontAtlasPage* try_get_current_page(MGF_Font& font)
     {
-        if (runtimeFont.Pages.empty())
+        if (font.Pages.empty())
             return nullptr;
 
-        return &runtimeFont.Pages.back();
+        return &font.Pages.back();
     }
 
-    const RuntimeAtlasPage* try_get_current_page(const MGF_RuntimeFont& runtimeFont)
+    const FontAtlasPage* try_get_current_page(const MGF_Font& font)
     {
-        if (runtimeFont.Pages.empty())
+        if (font.Pages.empty())
             return nullptr;
 
-        return &runtimeFont.Pages.back();
+        return &font.Pages.back();
     }
 
-    void initialize_packer(RuntimeAtlasPage& page)
+    void initialize_packer(FontAtlasPage& page)
     {
         page.PackNodes.resize(static_cast<size_t>(page.AtlasWidth));
         stbrp_init_target(&page.PackContext,
@@ -618,7 +618,7 @@ namespace
         }
     }
 
-    void rasterize_page(RuntimeAtlasPage& page)
+    void rasterize_page(FontAtlasPage& page)
     {
         page.Atlas.assign(static_cast<size_t>(page.AtlasWidth) * static_cast<size_t>(page.AtlasHeight) * 4, 0);
 
@@ -626,7 +626,7 @@ namespace
             rasterize_glyph(page.Atlas, page.AtlasWidth, glyph);
     }
 
-    mgbool rebuild_page(RuntimeAtlasPage& page,
+    mgbool rebuild_page(FontAtlasPage& page,
                         const std::vector<GlyphBuildInfo>& requiredGlyphs,
                         const std::vector<GlyphBuildInfo>& optionalGlyphs,
                         mgint startingAtlasSize,
@@ -693,30 +693,30 @@ namespace
         return false;
     }
 
-    void rebuild_lookup(MGF_RuntimeFont& runtimeFont)
+    void rebuild_lookup(MGF_Font& font)
     {
-        runtimeFont.GlyphLookup.clear();
+        font.GlyphLookup.clear();
 
-        for (size_t pageIndex = 0; pageIndex < runtimeFont.Pages.size(); ++pageIndex)
+        for (size_t pageIndex = 0; pageIndex < font.Pages.size(); ++pageIndex)
         {
-            const RuntimeAtlasPage& page = runtimeFont.Pages[pageIndex];
+            const FontAtlasPage& page = font.Pages[pageIndex];
             for (size_t glyphIndex = 0; glyphIndex < page.Glyphs.size(); ++glyphIndex)
             {
                 const GlyphBuildInfo& glyph = page.Glyphs[glyphIndex];
-                runtimeFont.GlyphLookup[{ glyph.Character, glyph.Size }] = { pageIndex, glyphIndex };
+                font.GlyphLookup[{ glyph.Character, glyph.Size }] = { pageIndex, glyphIndex };
             }
         }
     }
 
-    void update_glyph_results(MGF_RuntimeFont& runtimeFont)
+    void update_glyph_results(MGF_Font& font)
     {
         std::vector<const GlyphBuildInfo*> glyphs;
         size_t glyphCount = 0;
-        for (const RuntimeAtlasPage& page : runtimeFont.Pages)
+        for (const FontAtlasPage& page : font.Pages)
             glyphCount += page.Glyphs.size();
 
         glyphs.reserve(glyphCount);
-        for (const RuntimeAtlasPage& page : runtimeFont.Pages)
+        for (const FontAtlasPage& page : font.Pages)
         {
             for (const GlyphBuildInfo& glyph : page.Glyphs)
                 glyphs.push_back(&glyph);
@@ -733,14 +733,14 @@ namespace
                       return left->PageIndex < right->PageIndex;
                   });
 
-        rebuild_lookup(runtimeFont);
+        rebuild_lookup(font);
 
-        runtimeFont.GlyphResults.resize(glyphs.size());
+        font.GlyphResults.resize(glyphs.size());
         for (size_t i = 0; i < glyphs.size(); ++i)
         {
             const GlyphBuildInfo& glyph = *glyphs[i];
-            MGF_Glyph& result = runtimeFont.GlyphResults[i];
-            const RuntimeSizeInfo& sizeInfo = runtimeFont.SizeLookup[glyph.Size];
+            MGF_Glyph& result = font.GlyphResults[i];
+            const FontSizeInfo& sizeInfo = font.SizeLookup[glyph.Size];
 
             result.Character = glyph.Character;
             result.Size = glyph.Size;
@@ -759,17 +759,17 @@ namespace
         }
     }
 
-    void update_page_results(MGF_RuntimeFont& runtimeFont, const std::vector<RuntimePageUpdateInfo>& pageUpdates)
+    void update_page_results(MGF_Font& font, const std::vector<PageUpdateInfo>& pageUpdates)
     {
-        std::vector<RuntimePageUpdateInfo> uniqueUpdates;
+        std::vector<PageUpdateInfo> uniqueUpdates;
         uniqueUpdates.reserve(pageUpdates.size());
 
         // A single ensure call can append to a page and later rebuild that same page.  The public
         // result only needs the final page snapshot plus whether any rebuild happened along the way.
-        for (const RuntimePageUpdateInfo& pageUpdate : pageUpdates)
+        for (const PageUpdateInfo& pageUpdate : pageUpdates)
         {
             bool merged = false;
-            for (RuntimePageUpdateInfo& existing : uniqueUpdates)
+            for (PageUpdateInfo& existing : uniqueUpdates)
             {
                 if (existing.PageIndex != pageUpdate.PageIndex)
                     continue;
@@ -783,12 +783,12 @@ namespace
                 uniqueUpdates.push_back(pageUpdate);
         }
 
-        runtimeFont.PageUpdates.resize(uniqueUpdates.size());
+        font.PageUpdates.resize(uniqueUpdates.size());
         for (size_t i = 0; i < uniqueUpdates.size(); ++i)
         {
-            const RuntimePageUpdateInfo& pageUpdate = uniqueUpdates[i];
-            const RuntimeAtlasPage& page = runtimeFont.Pages[pageUpdate.PageIndex];
-            MGF_PageUpdate& result = runtimeFont.PageUpdates[i];
+            const PageUpdateInfo& pageUpdate = uniqueUpdates[i];
+            const FontAtlasPage& page = font.Pages[pageUpdate.PageIndex];
+            MGF_PageUpdate& result = font.PageUpdates[i];
             result.PageIndex = page.Index;
             result.AtlasRgba = page.Atlas.empty() ? nullptr : const_cast<mgbyte*>(page.Atlas.data());
             result.AtlasWidth = page.AtlasWidth;
@@ -797,14 +797,14 @@ namespace
         }
     }
 
-    MGF_ResultCode ensure_glyphs(const MGF_RuntimeFontEnsureGlyphsRequest& request,
-                                 MGF_RuntimeFontEnsureGlyphsResult& result)
+    MGF_ResultCode ensure_glyphs(const MGF_FontEnsureGlyphsRequest& request,
+                                 MGF_FontEnsureGlyphsResult& result)
     {
         try
         {
-            clear_runtime_font_ensure_glyphs_result(result);
+            clear_font_ensure_glyphs_result(result);
 
-            if (request.RuntimeFont == nullptr ||
+            if (request.Font == nullptr ||
                 request.Size <= 0 ||
                 request.CharacterRegions == nullptr ||
                 request.CharacterRegionCount <= 0)
@@ -812,10 +812,10 @@ namespace
                 return MGF_ResultCode_InvalidArgument;
             }
 
-            MGF_RuntimeFont& runtimeFont = *request.RuntimeFont;
+            MGF_Font& font = *request.Font;
 
-            RuntimeSizeInfo* sizeInfo = nullptr;
-            const MGF_ResultCode sizeInfoResult = ensure_size_info(runtimeFont, request.Size, sizeInfo);
+            FontSizeInfo* sizeInfo = nullptr;
+            const MGF_ResultCode sizeInfoResult = ensure_size_info(font, request.Size, sizeInfo);
             if (sizeInfoResult != MGF_ResultCode_Success)
                 return sizeInfoResult;
 
@@ -826,10 +826,10 @@ namespace
                 return MGF_ResultCode_NoGlyphData;
 
             std::vector<GlyphBuildInfo> newGlyphs;
-            const MGF_ResultCode buildResult = build_glyphs(runtimeFont.FreeTypeFace,
+            const MGF_ResultCode buildResult = build_glyphs(font.FreeTypeFace,
                                                             *sizeInfo,
                                                             characters,
-                                                            runtimeFont.GlyphLookup,
+                                                            font.GlyphLookup,
                                                             newGlyphs);
 
             if (buildResult != MGF_ResultCode_Success)
@@ -837,23 +837,23 @@ namespace
 
             if (newGlyphs.empty())
             {
-                result.Glyphs = runtimeFont.GlyphResults.empty() ? nullptr : runtimeFont.GlyphResults.data();
-                result.GlyphCount = static_cast<mgint>(runtimeFont.GlyphResults.size());
+                result.Glyphs = font.GlyphResults.empty() ? nullptr : font.GlyphResults.data();
+                result.GlyphCount = static_cast<mgint>(font.GlyphResults.size());
                 return MGF_ResultCode_Success;
             }
 
-            RuntimeAtlasPage* updatedPage = nullptr;
-            std::vector<RuntimePageUpdateInfo> touchedPages;
+            FontAtlasPage* updatedPage = nullptr;
+            std::vector<PageUpdateInfo> touchedPages;
             std::vector<GlyphBuildInfo> remainingGlyphs = std::move(newGlyphs);
             while (!remainingGlyphs.empty())
             {
-                RuntimeAtlasPage* writablePage = try_get_current_page(runtimeFont);
+                FontAtlasPage* writablePage = try_get_current_page(font);
                 if (writablePage == nullptr)
                 {
-                    RuntimeAtlasPage page = {};
-                    page.Index = static_cast<mgint>(runtimeFont.Pages.size());
-                    runtimeFont.Pages.push_back(std::move(page));
-                    writablePage = &runtimeFont.Pages.back();
+                    FontAtlasPage page = {};
+                    page.Index = static_cast<mgint>(font.Pages.size());
+                    font.Pages.push_back(std::move(page));
+                    writablePage = &font.Pages.back();
                 }
 
                 std::vector<GlyphBuildInfo> glyphsToAppend = remainingGlyphs;
@@ -882,9 +882,9 @@ namespace
                     if (writablePage->AtlasWidth >= MaximumAtlasSize &&
                         writablePage->AtlasHeight >= MaximumAtlasSize)
                     {
-                        RuntimeAtlasPage page = {};
-                        page.Index = static_cast<mgint>(runtimeFont.Pages.size());
-                        runtimeFont.Pages.push_back(std::move(page));
+                        FontAtlasPage page = {};
+                        page.Index = static_cast<mgint>(font.Pages.size());
+                        font.Pages.push_back(std::move(page));
                         continue;
                     }
 
@@ -901,9 +901,9 @@ namespace
                     {
                         if (!writablePage->Glyphs.empty())
                         {
-                            RuntimeAtlasPage page = {};
-                            page.Index = static_cast<mgint>(runtimeFont.Pages.size());
-                            runtimeFont.Pages.push_back(std::move(page));
+                            FontAtlasPage page = {};
+                            page.Index = static_cast<mgint>(font.Pages.size());
+                            font.Pages.push_back(std::move(page));
                             continue;
                         }
 
@@ -917,15 +917,15 @@ namespace
 
                     if (!remainingGlyphs.empty() && !pageAcceptedNewGlyphs)
                     {
-                        RuntimeAtlasPage page = {};
-                        page.Index = static_cast<mgint>(runtimeFont.Pages.size());
-                        runtimeFont.Pages.push_back(std::move(page));
+                        FontAtlasPage page = {};
+                        page.Index = static_cast<mgint>(font.Pages.size());
+                        font.Pages.push_back(std::move(page));
                     }
                 }
             }
 
-            update_glyph_results(runtimeFont);
-            update_page_results(runtimeFont, touchedPages);
+            update_glyph_results(font);
+            update_page_results(font, touchedPages);
 
             if (updatedPage == nullptr)
             {
@@ -935,15 +935,15 @@ namespace
                 return MGF_ResultCode_InternalError;
             }
 
-            result.PageUpdates = runtimeFont.PageUpdates.empty() ? nullptr : runtimeFont.PageUpdates.data();
-            result.PageUpdateCount = static_cast<mgint>(runtimeFont.PageUpdates.size());
-            result.Glyphs = runtimeFont.GlyphResults.empty() ? nullptr : runtimeFont.GlyphResults.data();
-            result.GlyphCount = static_cast<mgint>(runtimeFont.GlyphResults.size());
+            result.PageUpdates = font.PageUpdates.empty() ? nullptr : font.PageUpdates.data();
+            result.PageUpdateCount = static_cast<mgint>(font.PageUpdates.size());
+            result.Glyphs = font.GlyphResults.empty() ? nullptr : font.GlyphResults.data();
+            result.GlyphCount = static_cast<mgint>(font.GlyphResults.size());
             result.LineSpacing = sizeInfo->LineSpacing;
 
-            if (result.PageUpdates == nullptr || 
-                result.PageUpdateCount <= 0 || 
-                result.Glyphs == nullptr || 
+            if (result.PageUpdates == nullptr ||
+                result.PageUpdateCount <= 0 ||
+                result.Glyphs == nullptr ||
                 result.GlyphCount <= 0)
             {
                 mgf_debug_log_result("ensure_glyphs",
@@ -969,167 +969,158 @@ namespace
     }
 }
 
-MGF_ResultCode MGF_RuntimeFont_Create(mgbyte* data,
-                                      mgint dataBytes,
-                                      MGF_RuntimeFont*& runtimeFont)
+MGF_ResultCode MGF_Font_Create(mgbyte* data,
+                               mgint dataBytes,
+                               MGF_Font*& font)
 {
-    runtimeFont = nullptr;
+    font = nullptr;
 
     if (data == nullptr || dataBytes <= 0)
     {
-        mgf_debug_log_result("MGF_RuntimeFont_Create",
+        mgf_debug_log_result("MGF_Font_Create",
                              MGF_ResultCode_InvalidArgument,
                              "create was called with null font data or a non-positive data length");
         return MGF_ResultCode_InvalidArgument;
     }
 
-    MGF_RuntimeFont* createdRuntimeFont = nullptr;
+    MGF_Font* createdFont = nullptr;
 
     try
     {
-        createdRuntimeFont = new MGF_RuntimeFont();
-        createdRuntimeFont->FreeTypeLibrary = nullptr;
-        createdRuntimeFont->FreeTypeFace = nullptr;
-        createdRuntimeFont->FontData.assign(data, data + dataBytes);
+        createdFont = new MGF_Font();
+        createdFont->FreeTypeLibrary = nullptr;
+        createdFont->FreeTypeFace = nullptr;
+        createdFont->FontData.assign(data, data + dataBytes);
 
-        const FT_Error initResult = FT_Init_FreeType(&createdRuntimeFont->FreeTypeLibrary);
+        const FT_Error initResult = FT_Init_FreeType(&createdFont->FreeTypeLibrary);
         if (initResult != FT_Err_Ok)
         {
-            delete createdRuntimeFont;
-            createdRuntimeFont = nullptr;
-            mgf_debug_log_result("MGF_RuntimeFont_Create",
+            delete createdFont;
+            createdFont = nullptr;
+            mgf_debug_log_result("MGF_Font_Create",
                                  MGF_ResultCode_BackendInitializationFailed,
                                  "the font system could not be initialized");
             return MGF_ResultCode_BackendInitializationFailed;
         }
 
-        const FT_Error faceResult = FT_New_Memory_Face(createdRuntimeFont->FreeTypeLibrary,
-                                                       createdRuntimeFont->FontData.data(),
-                                                       static_cast<FT_Long>(createdRuntimeFont->FontData.size()),
+        const FT_Error faceResult = FT_New_Memory_Face(createdFont->FreeTypeLibrary,
+                                                       createdFont->FontData.data(),
+                                                       static_cast<FT_Long>(createdFont->FontData.size()),
                                                        0,
-                                                       &createdRuntimeFont->FreeTypeFace);
+                                                       &createdFont->FreeTypeFace);
 
         if (faceResult != FT_Err_Ok)
         {
-            FT_Done_FreeType(createdRuntimeFont->FreeTypeLibrary);
-            delete createdRuntimeFont;
-            createdRuntimeFont = nullptr;
-            mgf_debug_log_result("MGF_RuntimeFont_Create",
+            FT_Done_FreeType(createdFont->FreeTypeLibrary);
+            delete createdFont;
+            createdFont = nullptr;
+            mgf_debug_log_result("MGF_Font_Create",
                                  MGF_ResultCode_InvalidFontData,
                                  "the supplied font data could not be opened");
             return MGF_ResultCode_InvalidFontData;
         }
 
-        runtimeFont = createdRuntimeFont;
+        font = createdFont;
         return MGF_ResultCode_Success;
     }
     catch (const std::bad_alloc&)
     {
-        if (createdRuntimeFont != nullptr)
+        if (createdFont != nullptr)
         {
-            if (createdRuntimeFont->FreeTypeFace != nullptr)
-                FT_Done_Face(createdRuntimeFont->FreeTypeFace);
+            if (createdFont->FreeTypeFace != nullptr)
+                FT_Done_Face(createdFont->FreeTypeFace);
 
-            if (createdRuntimeFont->FreeTypeLibrary != nullptr)
-                FT_Done_FreeType(createdRuntimeFont->FreeTypeLibrary);
+            if (createdFont->FreeTypeLibrary != nullptr)
+                FT_Done_FreeType(createdFont->FreeTypeLibrary);
 
-            delete createdRuntimeFont;
+            delete createdFont;
         }
 
-        mgf_debug_log_result("MGF_RuntimeFont_Create",
+        mgf_debug_log_result("MGF_Font_Create",
                              MGF_ResultCode_OutOfMemory,
                              "create ran out of memory while initializing the font face.");
         return MGF_ResultCode_OutOfMemory;
     }
     catch (const std::exception&)
     {
-        if (createdRuntimeFont != nullptr)
+        if (createdFont != nullptr)
         {
-            if (createdRuntimeFont->FreeTypeFace != nullptr)
-                FT_Done_Face(createdRuntimeFont->FreeTypeFace);
+            if (createdFont->FreeTypeFace != nullptr)
+                FT_Done_Face(createdFont->FreeTypeFace);
 
-            if (createdRuntimeFont->FreeTypeLibrary != nullptr)
-                FT_Done_FreeType(createdRuntimeFont->FreeTypeLibrary);
+            if (createdFont->FreeTypeLibrary != nullptr)
+                FT_Done_FreeType(createdFont->FreeTypeLibrary);
 
-            delete createdRuntimeFont;
+            delete createdFont;
         }
 
-        mgf_debug_log_result("MGF_RuntimeFont_Create",
+        mgf_debug_log_result("MGF_Font_Create",
                              MGF_ResultCode_InternalError,
                              "create caught a standard exception.");
         return MGF_ResultCode_InternalError;
     }
     catch (...)
     {
-        if (createdRuntimeFont != nullptr)
+        if (createdFont != nullptr)
         {
-            if (createdRuntimeFont->FreeTypeFace != nullptr)
-                FT_Done_Face(createdRuntimeFont->FreeTypeFace);
+            if (createdFont->FreeTypeFace != nullptr)
+                FT_Done_Face(createdFont->FreeTypeFace);
 
-            if (createdRuntimeFont->FreeTypeLibrary != nullptr)
-                FT_Done_FreeType(createdRuntimeFont->FreeTypeLibrary);
+            if (createdFont->FreeTypeLibrary != nullptr)
+                FT_Done_FreeType(createdFont->FreeTypeLibrary);
 
-            delete createdRuntimeFont;
+            delete createdFont;
         }
 
-        mgf_debug_log_result("MGF_RuntimeFont_Create",
+        mgf_debug_log_result("MGF_Font_Create",
                              MGF_ResultCode_InternalError,
                              "create caught an unknown exception.");
         return MGF_ResultCode_InternalError;
     }
 }
 
-void MGF_RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont)
+void MGF_Font_Destroy(MGF_Font* font)
 {
-    if (runtimeFont != nullptr)
+    if (font != nullptr)
     {
-        if (runtimeFont->FreeTypeFace != nullptr)
-            FT_Done_Face(runtimeFont->FreeTypeFace);
+        if (font->FreeTypeFace != nullptr)
+            FT_Done_Face(font->FreeTypeFace);
 
-        if (runtimeFont->FreeTypeLibrary != nullptr)
-            FT_Done_FreeType(runtimeFont->FreeTypeLibrary);
+        if (font->FreeTypeLibrary != nullptr)
+            FT_Done_FreeType(font->FreeTypeLibrary);
     }
 
-    delete runtimeFont;
+    delete font;
 }
 
-MGF_ResultCode MGF_RuntimeFont_EnsureGlyphs(const MGF_RuntimeFontEnsureGlyphsRequest* request,
-                                            MGF_RuntimeFontEnsureGlyphsResult* result)
+MGF_ResultCode MGF_Font_EnsureGlyphs(const MGF_FontEnsureGlyphsRequest* request,
+                                     MGF_FontEnsureGlyphsResult* result)
 {
-    if(request == nullptr)
+    if (result != nullptr)
+        clear_font_ensure_glyphs_result(*result);
+
+    if (request == nullptr || result == nullptr)
     {
-        mgf_debug_log_result("MGF_RuntimeFont_EnsureGlyphs",
+        mgf_debug_log_result("MGF_Font_EnsureGlyphs",
                              MGF_ResultCode_InvalidArgument,
-                             "ensure glyphs was called with a null request.");
-
-        return MGF_ResultCode_InvalidArgument;        
-    }
-
-    if (result == nullptr)
-    {
-        mgf_debug_log_result("MGF_RuntimeFont_EnsureGlyphs",
-                             MGF_ResultCode_InvalidArgument,
-                             "ensure glyphs was called with a null result.");
-
+                             "ensure glyphs was called with a null request or result.");
         return MGF_ResultCode_InvalidArgument;
     }
-    
-    clear_runtime_font_ensure_glyphs_result(*result);
 
-    if (request->RuntimeFont == nullptr)
+    if (request->Font == nullptr)
     {
-        mgf_debug_log_result("MGF_RuntimeFont_EnsureGlyphs",
+        mgf_debug_log_result("MGF_Font_EnsureGlyphs",
                              MGF_ResultCode_InvalidArgument,
-                             "ensure glyphs was called with a null runtime font handle.");
+                             "ensure glyphs was called with a null font handle.");
         return MGF_ResultCode_InvalidArgument;
     }
 
     const MGF_ResultCode resultCode = ensure_glyphs(*request, *result);
     if (resultCode != MGF_ResultCode_Success)
     {
-        mgf_debug_log_result("MGF_RuntimeFont_EnsureGlyphs",
+        mgf_debug_log_result("MGF_Font_EnsureGlyphs",
                              resultCode,
-                             "ensure glyphs returned da non-success result.");
+                             "ensure glyphs returned a non-success result.");
     }
 
     return resultCode;
@@ -1138,28 +1129,21 @@ MGF_ResultCode MGF_RuntimeFont_EnsureGlyphs(const MGF_RuntimeFontEnsureGlyphsReq
 MGF_ResultCode MGF_BakeSpriteFont(const MGF_BakeSpriteFontRequest* request,
                                   MGF_BakeSpriteFontResult* result)
 {
-    if(request == nullptr)
+    if (result != nullptr)
+        clear_bake_sprite_font_result(*result);
+
+    if (request == nullptr || result == nullptr)
     {
         mgf_debug_log_result("MGF_BakeSpriteFont",
                              MGF_ResultCode_InvalidArgument,
-                             "bake  was called with a null request.");
-
-        return MGF_ResultCode_InvalidArgument;        
+                             "bake was called with a null request or result.");
+        return MGF_ResultCode_InvalidArgument;
     }
 
-    if (result == nullptr)
-    {
-        mgf_debug_log_result("MGF_BakeSpriteFont",
-                             MGF_ResultCode_InvalidArgument,
-                             "bake was called with a null result.");
-
-        return MGF_ResultCode_InvalidArgument;
-    }    
-
-    MGF_RuntimeFont* runtimeFont = nullptr;
-    const MGF_ResultCode createResult = MGF_RuntimeFont_Create(const_cast<mgbyte*>(request->Data),
-                                                               request->DataBytes,
-                                                               runtimeFont);
+    MGF_Font* font = nullptr;
+    const MGF_ResultCode createResult = MGF_Font_Create(const_cast<mgbyte*>(request->Data),
+                                                        request->DataBytes,
+                                                        font);
     if (createResult != MGF_ResultCode_Success)
     {
         mgf_debug_log_result("MGF_BakeSpriteFont",
@@ -1168,20 +1152,21 @@ MGF_ResultCode MGF_BakeSpriteFont(const MGF_BakeSpriteFontRequest* request,
         return createResult;
     }
 
-    MGF_RuntimeFontEnsureGlyphsRequest ensureRequest = {};
-    ensureRequest.RuntimeFont = runtimeFont;
+    MGF_FontEnsureGlyphsRequest ensureRequest = {};
+    ensureRequest.Font = font;
     ensureRequest.Size = request->Size;
     ensureRequest.CharacterRegions = request->CharacterRegions;
     ensureRequest.CharacterRegionCount = request->CharacterRegionCount;
 
-    MGF_RuntimeFontEnsureGlyphsResult ensureResult = {};
-    const MGF_ResultCode updateResult = MGF_RuntimeFont_EnsureGlyphs(&ensureRequest, &ensureResult);
+    MGF_FontEnsureGlyphsResult ensureResult = {};
+    const MGF_ResultCode updateResult = MGF_Font_EnsureGlyphs(&ensureRequest, &ensureResult);
+
 
     // SpriteFont still expects a single atlas texture, so the one shot helper stays strict even
-    // though the runtime font path can span multiple pages.
+    // though the incremental font path can span multiple pages.
     if (updateResult != MGF_ResultCode_Success)
     {
-        MGF_RuntimeFont_Destroy(runtimeFont);
+        MGF_Font_Destroy(font);
         mgf_debug_log_result("MGF_BakeSpriteFont",
                              updateResult,
                              "baked failed while ensuring glyphs.");
@@ -1190,16 +1175,16 @@ MGF_ResultCode MGF_BakeSpriteFont(const MGF_BakeSpriteFontRequest* request,
 
     if (ensureResult.PageUpdates == nullptr || ensureResult.PageUpdateCount != 1 || ensureResult.Glyphs == nullptr || ensureResult.GlyphCount <= 0)
     {
-        MGF_RuntimeFont_Destroy(runtimeFont);
+        MGF_Font_Destroy(font);
         mgf_debug_log_result("MGF_BakeSpriteFont",
                              MGF_ResultCode_NoGlyphData,
                              "bake did not produce a single valid atlas page and glyph set.");
         return MGF_ResultCode_NoGlyphData;
     }
 
-    if (runtimeFont->Pages.size() != 1)
+    if (font->Pages.size() != 1)
     {
-        MGF_RuntimeFont_Destroy(runtimeFont);
+        MGF_Font_Destroy(font);
         mgf_debug_log_result("MGF_BakeSpriteFont",
                              MGF_ResultCode_AtlasCapacityExceeded,
                              "bake required more than one atlas page.");
@@ -1209,7 +1194,7 @@ MGF_ResultCode MGF_BakeSpriteFont(const MGF_BakeSpriteFontRequest* request,
     const MGF_PageUpdate& runtimePageUpdate = ensureResult.PageUpdates[0];
     if (runtimePageUpdate.AtlasRgba == nullptr)
     {
-        MGF_RuntimeFont_Destroy(runtimeFont);
+        MGF_Font_Destroy(font);
         mgf_debug_log_result("MGF_BakeSpriteFont",
                              MGF_ResultCode_NoGlyphData,
                              "bake completed without atlas pixel data.");
@@ -1223,7 +1208,7 @@ MGF_ResultCode MGF_BakeSpriteFont(const MGF_BakeSpriteFontRequest* request,
     {
         free(atlasBuffer);
         free(glyphBuffer);
-        MGF_RuntimeFont_Destroy(runtimeFont);
+        MGF_Font_Destroy(font);
         mgf_debug_log_result("MGF_BakeSpriteFont",
                              MGF_ResultCode_OutOfMemory,
                              "bake ran out of memory while copying atlas or glyph results.");
@@ -1240,7 +1225,7 @@ MGF_ResultCode MGF_BakeSpriteFont(const MGF_BakeSpriteFontRequest* request,
     result->GlyphCount = ensureResult.GlyphCount;
     result->LineSpacing = ensureResult.LineSpacing;
 
-    MGF_RuntimeFont_Destroy(runtimeFont);
+    MGF_Font_Destroy(font);
     return MGF_ResultCode_Success;
 }
 

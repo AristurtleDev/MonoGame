@@ -6,10 +6,10 @@
 
 #include "api_common.h"
 
-// Opaque runtime font handle used by incremental glyph baking API.
-struct MGF_RuntimeFont;
+// Opaque font handle used by incremental glyph baking API.
+struct MGF_Font;
 
-// Stable result codes returned by the explicit runtime font contract.
+// Stable result codes returned by the explicit font contract.
 enum MGF_ResultCode
 {
     MGF_ResultCode_Success = 0,
@@ -53,7 +53,7 @@ struct MGF_Glyph
     mgfloat RightSideBearing;
 };
 
-// Atlas data returned for each page touched by the current runtime glyph update.
+// Atlas data returned for each page touched by the current glyph update.
 struct MGF_PageUpdate
 {
     mgint PageIndex;
@@ -82,15 +82,15 @@ struct MGF_BakeSpriteFontResult
     mgint LineSpacing;
 };
 
-struct MGF_RuntimeFontEnsureGlyphsRequest
+struct MGF_FontEnsureGlyphsRequest
 {
-    MGF_RuntimeFont* RuntimeFont;
+    MGF_Font* Font;
     mgint Size;
     const MGF_CharacterRegion* CharacterRegions;
     mgint CharacterRegionCount;
 };
 
-struct MGF_RuntimeFontEnsureGlyphsResult
+struct MGF_FontEnsureGlyphsResult
 {
     MGF_PageUpdate* PageUpdates;
     mgint PageUpdateCount;
@@ -102,7 +102,7 @@ struct MGF_RuntimeFontEnsureGlyphsResult
 /**
  * Bakes a traditional SpriteFont atlas in one call
  *
- * This is a convenience wrapper over the runtime font API for callers that only need a single
+ * This is a convenience wrapper over runtime font API for callers that only need a single
  * atlas page.  On success `atlasRgba` and `glyphs` are newly allocated buffers owned by the
  * caller and must be released with MGF_Free.  The function fails if the requested glyph set would
  * require more than one atlas page.
@@ -116,39 +116,39 @@ MG_EXPORT MGF_ResultCode MGF_BakeSpriteFont(const MGF_BakeSpriteFontRequest* req
                                             MGF_BakeSpriteFontResult* result);
 
 /**
- * Creates a runtime font handle for incremental glyph baking.
+ * Creates a font handle for incremental glyph baking.
  *
  * The function copies the provided font bytes so the caller may release the original buffer after
- * this call returns.  The returned handle must be destroyed with MGF_RuntimeFont_Destroy.
+ * this call returns.  The returned handle must be destroyed with MGF_Font_Destroy.
  *
  * @param data Pointer to the font file bytes.
  * @param dataBytes Number of byte available in `data`.
- * @param runtimeFont Receives a fully initialized runtime font handle on success.
+ * @param font Receives a fully initialized runtime font handle on success.
  * @return `MGF_ResultCode_Success` on success; otherwise returns  non-success result and leaves
- * `runtimeFont` as `nullptr`.
+ * `font` as `nullptr`.
  */
-MG_EXPORT MGF_ResultCode MGF_RuntimeFont_Create(mgbyte* data,
-                                                mgint dataBytes,
-                                                MGF_RuntimeFont*& runtimeFont);
+MG_EXPORT MGF_ResultCode MGF_Font_Create(mgbyte* data,
+                                         mgint dataBytes,
+                                         MGF_Font*& font);
 
-// Releases a handle created by MGF_RuntimeFont_Create. Passing `nullptr` is allowed.
-MG_EXPORT void MGF_RuntimeFont_Destroy(MGF_RuntimeFont* runtimeFont);
+// Releases a handle created by MGF_Font_Create. Passing `nullptr` is allowed.
+MG_EXPORT void MGF_Font_Destroy(MGF_Font* font);
 
 /**
- * Ensures that the requested characters exist in the runtime atlas for a given size.
+ * Ensures that the requested characters exist in the font atlas for a given size.
  *
  * Duplicate and overlapping character regions are merged before glyph generation.  On success,
  * `pageUpdates` points to the atlas pages touched by this call and `glyphs` points to the full
- * baked glyph set currently owned by `runtimeFont`.  Those pointers remain valid until the next
- * call that mutates `runtimeFont` or until MGF_RuntimeFont_Destroy is called.
+ * baked glyph set currently owned by `font`.  Those pointers remain valid until the next
+ * call that mutates `font` or until MGF_Font_Destroy is called.
  *
  * @param request Glyph request inputs.  Must not be `nullptr`.
  * @param result Receives the touched atlas pages and glyph outputs. Must not be `nullptr`.
  * @return `MGF_Result_Code_Success` when the glyph request completed successfully;
  * otherwise returns a non-success result and leaves all output data clear.
  */
-MG_EXPORT MGF_ResultCode MGF_RuntimeFont_EnsureGlyphs(const MGF_RuntimeFontEnsureGlyphsRequest* request,
-                                                      MGF_RuntimeFontEnsureGlyphsResult* result);
+MG_EXPORT MGF_ResultCode MGF_Font_EnsureGlyphs(const MGF_FontEnsureGlyphsRequest* request,
+                                                      MGF_FontEnsureGlyphsResult* result);
 
 // Releases buffers returned by MGF_BakeSpriteFont.  Passing `nullptr` is allowed.
 MG_EXPORT void MGF_Free(void* resource);
