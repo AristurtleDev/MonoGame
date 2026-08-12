@@ -146,15 +146,6 @@ internal class NativeGameWindow : GameWindow
         _height = GraphicsDeviceManager.DefaultBackBufferHeight;
 
         _icon = AssemblyHelper.GetDefaultWindowIcon();
-
-#if OPENGL
-        // OpenGL needs the presentation parameters first so the window can be
-        // created later with the right SDL_GL attributes.
-        //
-        // So we skip window creation for OpenGL path here and delay it.
-#else
-        CreateWindow();
-#endif
     }
 
     internal unsafe void Destroy()
