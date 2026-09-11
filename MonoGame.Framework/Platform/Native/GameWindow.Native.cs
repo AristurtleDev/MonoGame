@@ -411,9 +411,10 @@ internal class NativeGameWindow : GameWindow
         if (HasCreatedWindow)
             MGP.Window_SetClientSize(_handle, width, height);
 
-        _platform.Game.GraphicsDevice.PresentationParameters.BackBufferWidth = width;
-        _platform.Game.GraphicsDevice.PresentationParameters.BackBufferHeight = height;
-        _platform.Game.GraphicsDevice.Viewport = new Viewport(0, 0, width, height);
+        GraphicsDevice graphicsDevice = _platform.Game.GraphicsDevice;
+        graphicsDevice.PresentationParameters.BackBufferWidth = width;
+        graphicsDevice.PresentationParameters.BackBufferHeight = height;
+        graphicsDevice.PlatformOnWindowResized();
 
         OnClientSizeChanged();
     }
