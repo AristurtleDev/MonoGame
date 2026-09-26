@@ -58,9 +58,31 @@ export class BrowserWindow {
             canvas.tabIndex = 0;
         }
 
+        this.suppressBrowserMouseDefaults();
         globalThis.Module = globalThis.Module || {};
         globalThis.Module.canvas = canvas;
         logStage(HostStage.CanvasCreation, `Canvas '${canvas.id}' ready at ${canvas.width}x${canvas.height}.`);
+    }
+
+    /** Suppresses browser mouse actions that interrupt a canvas game. */
+    suppressBrowserMouseDefaults() {
+        this.canvas.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+        });
+
+        const suppressUnsupportedButtonAction = (event) => {
+            if (event.button === 3 || event.button === 4) {
+                event.preventDefault();
+            }
+        };
+
+        // SDL2 does not translate buttons 3 and 4, so suppress their browser Back and Forward defaults.
+        // Firefox reserves these buttons before dispatching cancellable page events: https://bugzilla.mozilla.org/show_bug.cgi?id=1933746
+        this.canvas.addEventListener("pointerdown", suppressUnsupportedButtonAction);
+        this.canvas.addEventListener("pointerup", suppressUnsupportedButtonAction);
+        this.canvas.addEventListener("mousedown", suppressUnsupportedButtonAction);
+        this.canvas.addEventListener("mouseup", suppressUnsupportedButtonAction);
+        this.canvas.addEventListener("auxclick", suppressUnsupportedButtonAction);
     }
 
     /**
