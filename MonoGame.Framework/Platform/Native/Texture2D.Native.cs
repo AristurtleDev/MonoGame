@@ -308,15 +308,24 @@ public partial class Texture2D : Texture
         dataHandle.Free();
     }
 
-    private static unsafe Texture2D PlatformFromStream(GraphicsDevice graphicsDevice, Stream stream, Action<byte[]> colorProcessor)
+    private static Texture2D PlatformFromStream(GraphicsDevice graphicsDevice, Stream stream, Action<byte[]> colorProcessor)
     {
-        ProcessorType processor = 0;
         if (colorProcessor == DefaultColorProcessors.ZeroTransparentPixels)
         {
-            colorProcessor = null;
-            processor |= ProcessorType.ZeroTransparentPixels;
+            return PlatformFromStream(graphicsDevice, stream, null, ProcessorType.ZeroTransparentPixels);
         }
 
+        Action<byte[], int, int> processor = null;
+        if (colorProcessor != null)
+        {
+            processor = (data, width, height) => colorProcessor(data);
+        }
+
+        return PlatformFromStream(graphicsDevice, stream, processor);
+    }
+
+    private static unsafe Texture2D PlatformFromStream(GraphicsDevice graphicsDevice, Stream stream, Action<byte[], int, int> colorProcessor, ProcessorType processor = 0)
+    {
         if (stream.CanSeek)
             stream.Seek(0, SeekOrigin.Begin);
         else
@@ -384,7 +393,7 @@ public partial class Texture2D : Texture
         MGI.FreeRGBA(rgba);
 
         // Do the processing.
-        colorProcessor(bytes);
+        colorProcessor(bytes, width, height);
 
         texture.SetData(bytes);
         return texture;

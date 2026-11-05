@@ -74,6 +74,96 @@ namespace MonoGame.Tests.Graphics
 #endif
         }
 
+#if !XNA
+        [Test]
+        public void FromStream_DimensionProcessor_ReceivesDimensionsAndUploadsChanges()
+        {
+            Color customValue = Color.BurlyWood;
+            using (Texture2D source = new Texture2D(gd, 3, 2))
+            using (MemoryStream stream = new MemoryStream())
+            {
+                source.SetData(new Color[6]);
+                source.SaveAsPng(stream, 3, 2);
+                stream.Position = 0;
+                int calls = 0;
+                int actualWidth = 0;
+                int actualHeight = 0;
+                int byteCount = 0;
+
+                using (Texture2D texture = Texture2D.FromStream(gd, stream, (data, width, height) =>
+                {
+                    calls++;
+                    actualWidth = width;
+                    actualHeight = height;
+                    byteCount = data.Length;
+                    data[0] = customValue.R;
+                    data[1] = customValue.G;
+                    data[2] = customValue.B;
+                    data[3] = customValue.A;
+                }))
+                {
+                    Color[] pixels = new Color[6];
+                    texture.GetData(pixels);
+                    Assert.AreEqual(1, calls);
+                    Assert.AreEqual(3, actualWidth);
+                    Assert.AreEqual(2, actualHeight);
+                    Assert.AreEqual(24, byteCount);
+                    Assert.AreEqual(customValue, pixels[0]);
+                }
+            }
+        }
+
+        [Test]
+        public void FromFile_DimensionProcessor_ReceivesDimensionsAndUploadsChanges()
+        {
+            Color customValue = Color.BurlyWood;
+            int calls = 0;
+            int actualWidth = 0;
+            int actualHeight = 0;
+            using (Texture2D texture = Texture2D.FromFile(gd, "Assets/Textures/sample_1280x853.hdr", (data, width, height) =>
+            {
+                calls++;
+                actualWidth = width;
+                actualHeight = height;
+                data[0] = customValue.R;
+                data[1] = customValue.G;
+                data[2] = customValue.B;
+                data[3] = customValue.A;
+            }))
+            {
+                Color[] pixels = new Color[1280 * 853];
+                texture.GetData(pixels);
+                Assert.AreEqual(1, calls);
+                Assert.AreEqual(1280, actualWidth);
+                Assert.AreEqual(853, actualHeight);
+                Assert.AreEqual(customValue, pixels[0]);
+            }
+        }
+
+        [Test]
+        public void FromStream_NullDimensionProcessor_LoadsImage()
+        {
+            using (Stream stream = File.OpenRead("Assets/Textures/sample_1280x853.hdr"))
+            using (Texture2D texture = Texture2D.FromStream(gd, stream, (Action<byte[], int, int>)null))
+            {
+                Assert.AreEqual(1280, texture.Width);
+                Assert.AreEqual(853, texture.Height);
+            }
+        }
+
+        [Test]
+        public void FromStream_DimensionProcessorAndNullStream_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() => Texture2D.FromStream(gd, null, (data, width, height) => { }));
+        }
+
+        [Test]
+        public void FromFile_DimensionProcessorAndNullPath_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() => Texture2D.FromFile(gd, null, (data, width, height) => { }));
+        }
+#endif
+
         [Test]
         public void FromStreamCustomProcessor()
         {
@@ -664,7 +754,7 @@ namespace MonoGame.Tests.Graphics
             using (System.IO.StreamReader reader = new System.IO.StreamReader("Assets/Textures/LogoOnly_64px.png"))
             {
                 Color[] data = new Color[arraySize];
-                
+
                 Color[] reference = new Color[4096];
                 Color[] written = new Color[4096];
                 for (int i = 0; i < arraySize; i++)
@@ -871,7 +961,7 @@ namespace MonoGame.Tests.Graphics
                 {
                     t.SetData(0, 0, new Rectangle(0, 0, 64, 64), dataAsSpan);
                 }
-                
+
                 t.GetData(written);
                 for (int i = 0; i < written.Length; i++)
                 {
@@ -905,7 +995,7 @@ namespace MonoGame.Tests.Graphics
         [TestCase(4096, -1, -1, 64, 64, true)]
         [TestCase(4096, 0, 0, -64, -64, true)]
         public void SetDataWithSpan3and4ParameterExceptionTest(int arraySize, int x, int y, int w, int h, bool use4Params)
-        { 
+        {
             using (System.IO.StreamReader reader = new System.IO.StreamReader("Assets/Textures/LogoOnly_64px.png"))
             {
                 Color[] data = new Color[arraySize];
